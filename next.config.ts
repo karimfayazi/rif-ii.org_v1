@@ -3,6 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: 'standalone',
   reactStrictMode: true,
+  // Set Turbopack root to silence multiple lockfiles warning
+  turbopack: {
+    root: process.cwd(),
+  },
   images: {
     unoptimized: true, // For Plesk hosting compatibility
     remotePatterns: [
