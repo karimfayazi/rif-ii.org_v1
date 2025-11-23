@@ -74,25 +74,37 @@ export default function ReportsPage() {
 		fetchReports();
 	};
 
+	const getFileUrl = (filePath: string) => {
+		if (!filePath) return '';
+		
+		// If already a full URL, return as is
+		if (filePath.startsWith('https://') || filePath.startsWith('http://')) {
+			return filePath;
+		}
+		
+		// Extract filename from various path formats
+		let fileName = filePath;
+		
+		// Remove ~/Uploads/Reports/ prefix if present
+		if (filePath.startsWith('~/Uploads/Reports/')) {
+			fileName = filePath.replace('~/Uploads/Reports/', '');
+		} 
+		// Remove Uploads/Reports/ prefix if present
+		else if (filePath.startsWith('Uploads/Reports/')) {
+			fileName = filePath.replace('Uploads/Reports/', '');
+		}
+		// Remove uploads/reports/ prefix if present (to avoid duplication)
+		else if (filePath.startsWith('uploads/reports/')) {
+			fileName = filePath.replace('uploads/reports/', '');
+		}
+		
+		// Construct URL with uploads/reports/ prefix
+		return `https://rif-ii.org/uploads/reports/${fileName}`;
+	};
+
 	const handleDownload = (filePath: string, reportTitle: string) => {
 		try {
-			// Check if filePath already contains the full path or starts with ~/Uploads/Reports/
-			let fullUrl;
-			if (filePath.startsWith('~/Uploads/Reports/')) {
-				// Remove the ~/Uploads/Reports/ prefix and construct the correct URL
-				const fileName = filePath.replace('~/Uploads/Reports/', '');
-				fullUrl = `https://rif-ii.org/${fileName}`;
-			} else if (filePath.startsWith('https://') || filePath.startsWith('http://')) {
-				// Already a full URL
-				fullUrl = filePath;
-			} else if (filePath.startsWith('Uploads/Reports/')) {
-				// Remove Uploads/Reports/ prefix and construct the correct URL
-				const fileName = filePath.replace('Uploads/Reports/', '');
-				fullUrl = `https://rif-ii.org/${fileName}`;
-			} else {
-				// Just a filename, construct the full URL
-				fullUrl = `https://rif-ii.org/${filePath}`;
-			}
+			const fullUrl = getFileUrl(filePath);
 			
 			// Create a temporary link element to trigger download
 			const link = document.createElement('a');

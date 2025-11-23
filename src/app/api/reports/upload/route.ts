@@ -3,9 +3,64 @@ import { getDb } from "@/lib/db";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
+import { getUserIdFromRequest } from "@/lib/auth";
+
+// Helper function to check if user is Admin
+async function checkAdminAccess(userId: string | null): Promise<{ isAdmin: boolean; message?: string }> {
+	if (!userId) {
+		return { isAdmin: false, message: "Unauthorized" };
+	}
+
+	try {
+		const pool = await getDb();
+		const accessQuery = `
+			SELECT [access_level]
+			FROM [_rifiiorg_db].[dbo].[tbl_user_access]
+			WHERE [username] = @userId OR [email] = @userId
+		`;
+		
+		const accessResult = await pool.request()
+			.input('userId', userId)
+			.query(accessQuery);
+		
+		if (accessResult.recordset.length === 0) {
+			return { isAdmin: false, message: "User not found" };
+		}
+
+		const accessLevel = accessResult.recordset[0].access_level;
+		// Check if access_level is exactly 'Admin' (case-sensitive)
+		const isAdmin = accessLevel === 'Admin';
+		
+		if (!isAdmin) {
+			return { 
+				isAdmin: false, 
+				message: "Insufficient Permissions. This action requires Admin level access. Please contact your administrator if you believe this is an error." 
+			};
+		}
+
+		return { isAdmin: true };
+	} catch (error) {
+		console.error("Error checking admin access:", error);
+		return { isAdmin: false, message: "Error checking access permissions" };
+	}
+}
 
 export async function POST(request: NextRequest) {
 	try {
+		// Check Admin access
+		const userId = getUserIdFromRequest(request);
+		const accessCheck = await checkAdminAccess(userId);
+		
+		if (!accessCheck.isAdmin) {
+			return NextResponse.json(
+				{
+					success: false,
+					message: accessCheck.message || "Access denied. Admin privileges required."
+				},
+				{ status: 403 }
+			);
+		}
+
 		const formData = await request.formData();
 		
 		// Extract form fields

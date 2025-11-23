@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Calendar, Folder, FileImage, RotateCcw, ArrowLeft, Eye, Upload, RefreshCw, Download } from "lucide-react";
+import { Calendar, Folder, FileImage, RotateCcw, ArrowLeft, Eye, Upload, RefreshCw, Download, Plus } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useAccess } from "@/hooks/useAccess";
+import { useAuth } from "@/hooks/useAuth";
 
 type PictureData = {
 	MainCategory: string | null;
@@ -29,9 +30,9 @@ type PictureDetail = {
 };
 
 export default function PicturesPage() {
-	// For demo purposes, using a hardcoded user ID. In real app, get from auth context
-	const userId = "1"; // Replace with actual user ID from auth context
-	const { canUpload, loading: accessLoading } = useAccess(userId);
+	const { user, getUserId } = useAuth();
+	const userId = user?.id || user?.username || getUserId() || "1";
+	const { canUpload, isAdmin, loading: accessLoading, accessLevel } = useAccess(userId);
 	
 	const [pictures, setPictures] = useState<PictureData[]>([]);
 	const [pictureDetails, setPictureDetails] = useState<PictureDetail[]>([]);
@@ -45,6 +46,19 @@ export default function PicturesPage() {
 	useEffect(() => {
 		fetchPictures();
 	}, []);
+
+	// Debug: Log admin status
+	useEffect(() => {
+		if (!accessLoading) {
+			console.log('Pictures Page - Access Status:', { 
+				isAdmin, 
+				canUpload, 
+				accessLoading, 
+				accessLevel,
+				userId 
+			});
+		}
+	}, [isAdmin, canUpload, accessLoading, accessLevel, userId]);
 
 	const fetchPictures = async () => {
 		try {
@@ -79,6 +93,20 @@ export default function PicturesPage() {
 		if (!sizeKB) return "Unknown";
 		if (sizeKB < 1024) return `${sizeKB} KB`;
 		return `${(sizeKB / 1024).toFixed(1)} MB`;
+	};
+
+	const getImageUrl = (filePath: string | null) => {
+		if (!filePath) return '';
+		if (filePath.startsWith('https://') || filePath.startsWith('http://')) {
+			return filePath;
+		} else if (filePath.startsWith('~/')) {
+			// Remove the ~/ prefix
+			return `https://rif-ii.org/${filePath.replace('~/', '')}`;
+		} else if (filePath.startsWith('uploads/')) {
+			return `/${filePath}`;
+		} else {
+			return `https://rif-ii.org/${filePath}`;
+		}
 	};
 
 	const fetchPictureDetails = async (mainCategory: string, subCategory: string) => {
@@ -162,6 +190,16 @@ export default function PicturesPage() {
 							>
 								<Upload className="h-4 w-4 mr-2" />
 								Upload Pictures
+							</Link>
+						)}
+						{/* Show Add Pictures button only for Admin users */}
+						{!accessLoading && isAdmin && accessLevel === 'Admin' && (
+							<Link
+								href="/dashboard/pictures/add_pictures"
+								className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+							>
+								<Plus className="h-4 w-4 mr-2" />
+								Add Pictures
 							</Link>
 						)}
 						<button
@@ -261,13 +299,7 @@ export default function PicturesPage() {
 									<div className="aspect-video relative bg-gradient-to-br from-blue-50 to-indigo-100 rounded-t-lg overflow-hidden">
 										{picture.PreviewImage ? (
 											<Image
-												src={(() => {
-													const path = picture.PreviewImage;
-													if (path.startsWith('~/')) {
-														return `https://rif-ii.org/${path.replace('~/', '')}`;
-													}
-													return `https://rif-ii.org/${path}`;
-												})()}
+												src={getImageUrl(picture.PreviewImage)}
 												alt={picture.MainCategory || "Preview"}
 												fill
 												className="object-cover group-hover:scale-105 transition-transform duration-200"
@@ -377,19 +409,14 @@ export default function PicturesPage() {
 										{picture.FilePath ? (
 											<>
 												<Image
-													src={picture.FilePath.startsWith('uploads/') 
-														? `/${picture.FilePath}` 
-														: `https://rif-ii.org/${picture.FilePath}`
-													}
+													src={getImageUrl(picture.FilePath)}
 													alt={picture.FileName || "Picture"}
 													fill
 													className="object-cover group-hover:scale-105 transition-transform duration-200"
 													unoptimized
 													onError={(e) => {
 														console.log("Image load error for:", picture.FilePath);
-														console.log("Constructed URL:", picture.FilePath?.startsWith('uploads/') 
-															? `/${picture.FilePath}` 
-															: `https://rif-ii.org/${picture.FilePath}`);
+														console.log("Constructed URL:", getImageUrl(picture.FilePath));
 													}}
 												/>
 											</>
@@ -466,10 +493,7 @@ export default function PicturesPage() {
 							<div className="relative aspect-video">
 								{selectedImage.FilePath ? (
 									<Image
-									src={selectedImage.FilePath.startsWith('uploads/') 
-										? `/${selectedImage.FilePath}` 
-										: `https://rif-ii.org/${selectedImage.FilePath}`
-									}
+										src={getImageUrl(selectedImage.FilePath)}
 										alt={selectedImage.FileName || "Picture"}
 										fill
 										className="object-contain"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, 
@@ -13,6 +13,60 @@ import {
   Plus
 } from "lucide-react";
 import OutputManagementModal from "@/components/OutputManagementModal";
+
+const UNIT_NAME_OPTIONS = [
+  "Anaerobic Baffled Reactor",
+  "Anaerobic Filter",
+  "Analysis Report",
+  "Assessment",
+  "Bank Account",
+  "Comitee",
+  "Contract",
+  "Dewat System",
+  "Data Collection",
+  "Design Document",
+  "Detailed Design",
+  "Discharge Outlet Structure",
+  "Document",
+  "Drilling",
+  "Esia Report",
+  "Fencing",
+  "Field Visit",
+  "Land",
+  "Mis",
+  "Map",
+  "Master Plan",
+  "Measures(Tubewell)",
+  "Notfication Period",
+  "On Job Training",
+  "Pipe Line",
+  "Project",
+  "Pump House",
+  "Pump/Machinery",
+  "Report",
+  "Scheme",
+  "Sludge Drying Bed",
+  "Solar Yestem",
+  "Storm Water Overflow Structure",
+  "Study Report",
+  "Survey",
+  "Survey Report",
+  "Team Members",
+  "Tender Document",
+  "Tool",
+  "Training",
+  "Tubewell",
+  "Valve Chamber",
+  "Visit",
+  "Water Supply Scheme",
+  "Workshop",
+  "Confirmation Report",
+  "Drains",
+  "Interventions",
+  "Monitoring",
+  "Study",
+  "Treatment Plant"
+];
 
 type TrackingData = {
   id?: number;
@@ -89,6 +143,7 @@ export default function AddTrackingRecordPage() {
   const [loadingSubActivities, setLoadingSubActivities] = useState(false);
   const [tehsils, setTehsils] = useState<string[]>([]);
   const [loadingTehsils, setLoadingTehsils] = useState(false);
+  const [unitSearchTerm, setUnitSearchTerm] = useState("");
 
   // Keep MainActivityName in sync when ActivityID or activity list changes
   useEffect(() => {
@@ -129,6 +184,13 @@ export default function AddTrackingRecordPage() {
       setLoadingOutputs(false);
     }
   };
+
+  const filteredUnitOptions = useMemo(() => {
+    if (!unitSearchTerm.trim()) return UNIT_NAME_OPTIONS;
+    return UNIT_NAME_OPTIONS.filter(unit =>
+      unit.toLowerCase().includes(unitSearchTerm.toLowerCase())
+    );
+  }, [unitSearchTerm]);
 
   // Handle outputs change from modal
   const handleOutputsChange = () => {
@@ -792,14 +854,35 @@ export default function AddTrackingRecordPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Unit Name
                     </label>
-                    <input
-                      type="text"
-                      name="UnitName"
-                      value={formData.UnitName}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-[#0b4d2b] outline-none transition-colors"
-                      placeholder="Enter Unit Name"
-                    />
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={unitSearchTerm}
+                        onChange={(e) => setUnitSearchTerm(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-[#0b4d2b] outline-none transition-colors"
+                        placeholder="Search unit names..."
+                      />
+                      <select
+                        name="UnitName"
+                        value={formData.UnitName}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-[#0b4d2b] outline-none transition-colors bg-white"
+                      >
+                        <option value="">Select Unit Name</option>
+                        {filteredUnitOptions.length === 0 ? (
+                          <option value="" disabled>No matches found</option>
+                        ) : (
+                          filteredUnitOptions.map((unit) => (
+                            <option key={unit} value={unit}>
+                              {unit}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      <p className="text-xs text-gray-500">
+                        Start typing to filter unit names or select from the list.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

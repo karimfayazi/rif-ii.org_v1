@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Calendar, Folder, Image as ImageIcon, ExternalLink, TrendingUp, MapPin, Building2 } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 
 type PictureData = {
 	GroupName: string;
@@ -91,150 +90,258 @@ function GISMapWithBoundaries() {
 					// Load and display GeoJSON layers
 					const loadGeoJSONLayers = async () => {
 						try {
-							// Check if map still exists
+							// Check if map still exists and is valid
 							const currentMap = mapInstanceRef.current;
-							if (!currentMap) {
-								console.warn('Map instance not available, skipping layer load');
+							if (!currentMap || !currentMap.getContainer || !currentMap.getContainer()) {
+								console.warn('Map instance not available or not initialized, skipping layer load');
+								return;
+							}
+
+							// Verify map container exists
+							const mapContainer = currentMap.getContainer();
+							if (!mapContainer || !mapContainer.parentNode) {
+								console.warn('Map container not available, skipping layer load');
 								return;
 							}
 
 							// Load Boundary layer
 							const boundaryResponse = await fetch('/maps/DIK/Paharpur/Paharpur_NC_Boundary_WGS84.json');
-							if (boundaryResponse.ok && currentMap) {
-								const boundaryData = await boundaryResponse.json();
-								if (currentMap) {
-									L.geoJSON(boundaryData, {
-										style: {
-											color: '#0b4d2b',
-											weight: 3,
-											opacity: 0.8,
-											fillColor: '#0b4d2b',
-											fillOpacity: 0.2
-										},
-										onEachFeature: (feature: any, layer: any) => {
-											if (feature.properties) {
-												const props = feature.properties;
-												const popupContent = `
-													<div style="font-weight: bold; margin-bottom: 5px;">${props.NC || 'Boundary'}</div>
-													<div>Tehsil: ${props.Tehsil || 'N/A'}</div>
-													<div>District: ${props.District || 'N/A'}</div>
-												`;
-												layer.bindPopup(popupContent);
+							if (boundaryResponse.ok && currentMap && currentMap.getContainer()) {
+								try {
+									const boundaryData = await boundaryResponse.json();
+									if (currentMap && currentMap.getContainer()) {
+										const layer = L.geoJSON(boundaryData, {
+											style: {
+												color: '#0b4d2b',
+												weight: 3,
+												opacity: 0.8,
+												fillColor: '#0b4d2b',
+												fillOpacity: 0.2
+											},
+											onEachFeature: (feature: any, layer: any) => {
+												if (feature.properties) {
+													const props = feature.properties;
+													const popupContent = `
+														<div style="font-weight: bold; margin-bottom: 5px;">${props.NC || 'Boundary'}</div>
+														<div>Tehsil: ${props.Tehsil || 'N/A'}</div>
+														<div>District: ${props.District || 'N/A'}</div>
+													`;
+													layer.bindPopup(popupContent);
+												}
 											}
+										});
+									if (
+										layer &&
+										currentMap &&
+										currentMap.getContainer() &&
+										typeof currentMap.addLayer === 'function'
+									) {
+										try {
+											// Re-check currentMap right before adding to ensure it's still valid
+											const mapToUse = mapInstanceRef.current;
+											if (mapToUse && mapToUse.getContainer && mapToUse.getContainer()) {
+												layer.addTo(mapToUse);
+											} else {
+												console.warn('Map instance became invalid before adding boundary layer');
+											}
+										} catch (err) {
+											console.error('Error adding boundary layer to map:', err);
 										}
-									}).addTo(currentMap);
+									} else {
+										console.warn('Skipping boundary layer add due to invalid map instance');
+									}
+									}
+								} catch (err) {
+									console.error('Error adding boundary layer:', err);
 								}
 							}
 
 							// Load Solid Waste points layer
 							const swResponse = await fetch('/maps/DIK/Paharpur/Paharpur_NC_Sw_WGS84.json');
-							if (swResponse.ok && currentMap) {
-								const swData = await swResponse.json();
-								if (currentMap) {
-									L.geoJSON(swData, {
-										pointToLayer: (feature: any, latlng: any) => {
-											const status = feature.properties?.Status || '';
-											const isOfficial = status.toLowerCase().includes('official');
-											return L.circleMarker(latlng, {
-												radius: 6,
-												fillColor: isOfficial ? '#28a745' : '#dc3545',
-												color: '#fff',
-												weight: 2,
-												opacity: 1,
-												fillOpacity: 0.8
-											});
-										},
-										onEachFeature: (feature: any, layer: any) => {
-											if (feature.properties) {
-												const props = feature.properties;
-												const popupContent = `
-													<div style="font-weight: bold; margin-bottom: 5px;">${props.Name || 'Dumping Site'}</div>
-													<div>Status: ${props.Status || 'N/A'}</div>
-												`;
-												layer.bindPopup(popupContent);
+							if (swResponse.ok && currentMap && currentMap.getContainer()) {
+								try {
+									const swData = await swResponse.json();
+									if (currentMap && currentMap.getContainer()) {
+										const layer = L.geoJSON(swData, {
+											pointToLayer: (feature: any, latlng: any) => {
+												const status = feature.properties?.Status || '';
+												const isOfficial = status.toLowerCase().includes('official');
+												return L.circleMarker(latlng, {
+													radius: 6,
+													fillColor: isOfficial ? '#28a745' : '#dc3545',
+													color: '#fff',
+													weight: 2,
+													opacity: 1,
+													fillOpacity: 0.8
+												});
+											},
+											onEachFeature: (feature: any, layer: any) => {
+												if (feature.properties) {
+													const props = feature.properties;
+													const popupContent = `
+														<div style="font-weight: bold; margin-bottom: 5px;">${props.Name || 'Dumping Site'}</div>
+														<div>Status: ${props.Status || 'N/A'}</div>
+													`;
+													layer.bindPopup(popupContent);
+												}
 											}
+										});
+									if (
+										layer &&
+										currentMap &&
+										currentMap.getContainer() &&
+										typeof currentMap.addLayer === 'function'
+									) {
+										try {
+											// Re-check currentMap right before adding to ensure it's still valid
+											const mapToUse = mapInstanceRef.current;
+											if (mapToUse && mapToUse.getContainer && mapToUse.getContainer()) {
+												layer.addTo(mapToUse);
+											} else {
+												console.warn('Map instance became invalid before adding solid waste layer');
+											}
+										} catch (err) {
+											console.error('Error adding solid waste layer to map:', err);
 										}
-									}).addTo(currentMap);
+									} else {
+										console.warn('Skipping solid waste layer add due to invalid map instance');
+									}
+									}
+								} catch (err) {
+									console.error('Error adding solid waste layer:', err);
 								}
 							}
 
 							// Load Water points layer
 							const waterResponse = await fetch('/maps/DIK/Paharpur/Paharpur_NC_Water_WGS84.json');
-							if (waterResponse.ok && currentMap) {
-								const waterData = await waterResponse.json();
-								if (currentMap) {
-									L.geoJSON(waterData, {
-										pointToLayer: (feature: any, latlng: any) => {
-											const featureType = feature.properties?.Feature || '';
-											const isFunctional = featureType.toLowerCase().includes('functional');
-											return L.circleMarker(latlng, {
-												radius: 6,
-												fillColor: isFunctional ? '#007bff' : '#6c757d',
-												color: '#fff',
-												weight: 2,
-												opacity: 1,
-												fillOpacity: 0.8
-											});
-										},
-										onEachFeature: (feature: any, layer: any) => {
-											if (feature.properties) {
-												const props = feature.properties;
-												const popupContent = `
-													<div style="font-weight: bold; margin-bottom: 5px;">${props.Name || 'Water Point'}</div>
-													<div>Feature: ${props.Feature || 'N/A'}</div>
-													<div>NC: ${props.NC || 'N/A'}</div>
-												`;
-												layer.bindPopup(popupContent);
+							if (waterResponse.ok && currentMap && currentMap.getContainer()) {
+								try {
+									const waterData = await waterResponse.json();
+									if (currentMap && currentMap.getContainer()) {
+										const layer = L.geoJSON(waterData, {
+											pointToLayer: (feature: any, latlng: any) => {
+												const featureType = feature.properties?.Feature || '';
+												const isFunctional = featureType.toLowerCase().includes('functional');
+												return L.circleMarker(latlng, {
+													radius: 6,
+													fillColor: isFunctional ? '#007bff' : '#6c757d',
+													color: '#fff',
+													weight: 2,
+													opacity: 1,
+													fillOpacity: 0.8
+												});
+											},
+											onEachFeature: (feature: any, layer: any) => {
+												if (feature.properties) {
+													const props = feature.properties;
+													const popupContent = `
+														<div style="font-weight: bold; margin-bottom: 5px;">${props.Name || 'Water Point'}</div>
+														<div>Feature: ${props.Feature || 'N/A'}</div>
+														<div>NC: ${props.NC || 'N/A'}</div>
+													`;
+													layer.bindPopup(popupContent);
+												}
 											}
+										});
+									if (
+										layer &&
+										currentMap &&
+										currentMap.getContainer() &&
+										typeof currentMap.addLayer === 'function'
+									) {
+										try {
+											// Re-check currentMap right before adding to ensure it's still valid
+											const mapToUse = mapInstanceRef.current;
+											if (mapToUse && mapToUse.getContainer && mapToUse.getContainer()) {
+												layer.addTo(mapToUse);
+											} else {
+												console.warn('Map instance became invalid before adding water layer');
+											}
+										} catch (err) {
+											console.error('Error adding water layer to map:', err);
 										}
-									}).addTo(currentMap);
+									} else {
+										console.warn('Skipping water layer add due to invalid map instance');
+									}
+									}
+								} catch (err) {
+									console.error('Error adding water layer:', err);
 								}
 							}
 
 							// Load Points layer (combined points)
 							const pointsResponse = await fetch('/maps/DIK/Paharpur/Paharpur_Points_WGS84.json');
-							if (pointsResponse.ok && currentMap) {
-								const pointsData = await pointsResponse.json();
-								if (currentMap) {
-									L.geoJSON(pointsData, {
-										pointToLayer: (feature: any, latlng: any) => {
-											const featureType = feature.properties?.Feature || '';
-											let color = '#ffc107';
-											if (featureType.toLowerCase().includes('dumping')) {
-												color = feature.properties?.Status?.toLowerCase().includes('official') ? '#28a745' : '#dc3545';
-											} else if (featureType.toLowerCase().includes('water') || featureType.toLowerCase().includes('reservoir') || featureType.toLowerCase().includes('tube well')) {
-												color = feature.properties?.Status?.toLowerCase().includes('functional') ? '#007bff' : '#6c757d';
+							if (pointsResponse.ok && currentMap && currentMap.getContainer()) {
+								try {
+									const pointsData = await pointsResponse.json();
+									if (currentMap && currentMap.getContainer()) {
+										const layer = L.geoJSON(pointsData, {
+											pointToLayer: (feature: any, latlng: any) => {
+												const featureType = feature.properties?.Feature || '';
+												let color = '#ffc107';
+												if (featureType.toLowerCase().includes('dumping')) {
+													color = feature.properties?.Status?.toLowerCase().includes('official') ? '#28a745' : '#dc3545';
+												} else if (featureType.toLowerCase().includes('water') || featureType.toLowerCase().includes('reservoir') || featureType.toLowerCase().includes('tube well')) {
+													color = feature.properties?.Status?.toLowerCase().includes('functional') ? '#007bff' : '#6c757d';
+												}
+												return L.circleMarker(latlng, {
+													radius: 5,
+													fillColor: color,
+													color: '#fff',
+													weight: 2,
+													opacity: 1,
+													fillOpacity: 0.8
+												});
+											},
+											onEachFeature: (feature: any, layer: any) => {
+												if (feature.properties) {
+													const props = feature.properties;
+													const popupContent = `
+														<div style="font-weight: bold; margin-bottom: 5px;">${props.Name || 'Point'}</div>
+														<div>Feature: ${props.Feature || 'N/A'}</div>
+														${props.Status ? `<div>Status: ${props.Status}</div>` : ''}
+													`;
+													layer.bindPopup(popupContent);
+												}
 											}
-											return L.circleMarker(latlng, {
-												radius: 5,
-												fillColor: color,
-												color: '#fff',
-												weight: 2,
-												opacity: 1,
-												fillOpacity: 0.8
-											});
-										},
-										onEachFeature: (feature: any, layer: any) => {
-											if (feature.properties) {
-												const props = feature.properties;
-												const popupContent = `
-													<div style="font-weight: bold; margin-bottom: 5px;">${props.Name || 'Point'}</div>
-													<div>Feature: ${props.Feature || 'N/A'}</div>
-													${props.Status ? `<div>Status: ${props.Status}</div>` : ''}
-												`;
-												layer.bindPopup(popupContent);
+										});
+									if (
+										layer &&
+										currentMap &&
+										currentMap.getContainer() &&
+										typeof currentMap.addLayer === 'function'
+									) {
+										try {
+											// Re-check currentMap right before adding to ensure it's still valid
+											const mapToUse = mapInstanceRef.current;
+											if (mapToUse && mapToUse.getContainer && mapToUse.getContainer()) {
+												layer.addTo(mapToUse);
+											} else {
+												console.warn('Map instance became invalid before adding combined points layer');
 											}
+										} catch (err) {
+											console.error('Error adding combined points layer to map:', err);
 										}
-									}).addTo(currentMap);
+									} else {
+										console.warn('Skipping combined points layer add due to invalid map instance');
+									}
+									}
+								} catch (err) {
+									console.error('Error adding points layer:', err);
 								}
 							}
 
 							// Fit map to show all layers
-							if (currentMap && typeof currentMap.fitBounds === 'function') {
-								currentMap.fitBounds([
-									[32.093, 70.945],
-									[32.125, 70.998]
-								], { padding: [20, 20] });
+							try {
+								const mapToUse = mapInstanceRef.current;
+								if (mapToUse && typeof mapToUse.fitBounds === 'function' && mapToUse.getContainer && mapToUse.getContainer()) {
+									mapToUse.fitBounds([
+										[32.093, 70.945],
+										[32.125, 70.998]
+									], { padding: [20, 20] });
+								}
+							} catch (err) {
+								console.error('Error fitting map bounds:', err);
 							}
 
 						} catch (error) {
@@ -417,12 +524,49 @@ export default function DashboardPage() {
 	useEffect(() => {
 		if (isAutoPlaying && pictures.length > 0) {
 			const interval = setInterval(() => {
-				setCurrentIndex((prevIndex) => (prevIndex + 1) % pictures.length);
+				setCurrentIndex((prevIndex) => {
+					// Show 4 images at a time, so max index should be pictures.length - 4
+					const maxIndex = Math.max(0, pictures.length - 4);
+					return prevIndex >= maxIndex ? 0 : prevIndex + 1;
+				});
 			}, 3000); // Change picture every 3 seconds
 
 			return () => clearInterval(interval);
 		}
 	}, [isAutoPlaying, pictures.length]);
+
+	const getImageUrl = (filePath: string | null) => {
+		if (!filePath) {
+			console.warn('getImageUrl: filePath is null or empty');
+			return '';
+		}
+		
+		// If already a full URL, return as is
+		if (filePath.startsWith('https://') || filePath.startsWith('http://')) {
+			return filePath;
+		}
+		
+		// Remove ~/ prefix if present
+		let cleanPath = filePath.startsWith('~/') ? filePath.replace('~/', '') : filePath;
+		
+		// Ensure it starts with Uploads (capital U as per the server structure)
+		if (!cleanPath.startsWith('Uploads/') && !cleanPath.startsWith('uploads/')) {
+			cleanPath = `Uploads/${cleanPath}`;
+		} else if (cleanPath.startsWith('uploads/')) {
+			// Convert lowercase uploads to Uploads
+			cleanPath = 'Uploads/' + cleanPath.substring('uploads/'.length);
+		}
+		
+		// Construct full URL
+		const fullUrl = `https://rif-ii.org/${cleanPath}`;
+		
+		// Debug logging (only in development)
+		if (process.env.NODE_ENV === 'development') {
+			console.log('getImageUrl:', { original: filePath, cleaned: cleanPath, final: fullUrl });
+		}
+		
+		return fullUrl;
+	};
 
 	const fetchDashboardPictures = async () => {
 		try {
@@ -431,6 +575,8 @@ export default function DashboardPage() {
 			const data = await response.json();
 
 			if (data.success) {
+				console.log('Dashboard pictures fetched:', data.pictures?.length || 0, 'pictures');
+				console.log('Sample picture data:', data.pictures?.[0]);
 				setPictures(data.pictures || []);
 			} else {
 				setError(data.message || "Failed to fetch pictures");
@@ -483,11 +629,19 @@ export default function DashboardPage() {
 	};
 
 	const nextPicture = () => {
-		setCurrentIndex((prevIndex) => (prevIndex + 1) % pictures.length);
+		setCurrentIndex((prevIndex) => {
+			// Show 4 images at a time, so max index should be pictures.length - 4
+			const maxIndex = Math.max(0, pictures.length - 4);
+			return prevIndex >= maxIndex ? 0 : prevIndex + 1;
+		});
 	};
 
 	const prevPicture = () => {
-		setCurrentIndex((prevIndex) => (prevIndex - 1 + pictures.length) % pictures.length);
+		setCurrentIndex((prevIndex) => {
+			// Show 4 images at a time, so max index should be pictures.length - 4
+			const maxIndex = Math.max(0, pictures.length - 4);
+			return prevIndex <= 0 ? maxIndex : prevIndex - 1;
+		});
 	};
 
 	const formatDate = (dateString: string) => {
@@ -504,8 +658,8 @@ export default function DashboardPage() {
 		}
 	};
 
-	// Get 4 pictures for the carousel
-	const carouselPictures = pictures.slice(0, 4);
+	// Get all pictures for the carousel
+	const carouselPictures = pictures;
 
 	if (loading) {
 		return (
@@ -549,210 +703,6 @@ export default function DashboardPage() {
 				<h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
 				<p className="text-gray-600 mt-2">Welcome to the RIF-II MIS Dashboard</p>
 			</div>
-
-			{/* GIS Report */}
-			<div className="bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden">
-				<div className="p-6 border-b border-gray-200">
-					<div className="flex items-center justify-between">
-						<div>
-							<h2 className="text-xl font-semibold text-gray-900">GIS Report</h2>
-							<p className="text-sm text-gray-600 mt-1">Interactive online GIS maps with boundaries</p>
-						</div>
-						<Link 
-							href="/dashboard/maps/kpk-dik-bannu"
-							className="inline-flex items-center px-4 py-2 text-sm font-medium text-[#0b4d2b] bg-[#0b4d2b]/10 rounded-lg hover:bg-[#0b4d2b]/20 transition-colors"
-						>
-							<ExternalLink className="h-4 w-4 mr-2" />
-							View Full Maps
-						</Link>
-					</div>
-				</div>
-				<div className="p-6">
-					<GISMapWithBoundaries />
-				</div>
-			</div>
-
-			{/* Pictures Carousel Section - Hidden */}
-			{false && (
-			<div className="bg-gradient-to-r from-white to-gray-50 rounded-xl border border-gray-200 shadow-lg overflow-hidden">
-				<div className="p-6 border-b border-gray-200">
-					<div className="flex items-center justify-between">
-		<div>
-							<h2 className="text-xl font-semibold text-gray-900">Recent Pictures</h2>
-							<p className="text-sm text-gray-600 mt-1">Click on any picture to view more details</p>
-						</div>
-						<div className="flex items-center space-x-2">
-							<button
-								onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-								className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-									isAutoPlaying 
-										? 'bg-green-100 text-green-800 hover:bg-green-200' 
-										: 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-								}`}
-							>
-								{isAutoPlaying ? 'Auto Play ON' : 'Auto Play OFF'}
-							</button>
-							<Link
-								href="/dashboard/pictures"
-								className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-[#0b4d2b] bg-[#0b4d2b]/10 rounded-lg hover:bg-[#0b4d2b]/20 transition-colors"
-							>
-								<ExternalLink className="h-3 w-3 mr-1" />
-								View All
-							</Link>
-						</div>
-					</div>
-				</div>
-
-				{carouselPictures.length === 0 ? (
-					<div className="p-12 text-center">
-						<ImageIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-						<h3 className="text-lg font-medium text-gray-900 mb-2">No pictures available</h3>
-						<p className="text-gray-600">Pictures will appear here once they are uploaded</p>
-					</div>
-				) : (
-					<div className="relative">
-						{/* Carousel Container */}
-						<div className="flex transition-transform duration-500 ease-in-out" style={{ transform: `translateX(-${currentIndex * 25}%)` }}>
-							{carouselPictures.map((picture, index) => (
-								<div key={index} className="w-1/4 flex-shrink-0 p-4">
-									<div
-										onClick={() => handlePictureClick(picture)}
-										className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 group cursor-pointer overflow-hidden"
-									>
-										{/* Image */}
-										<div className="aspect-video bg-gray-100 relative overflow-hidden">
-											<Image
-												src={`https://rif-ii.org/${picture.FilePath}`}
-												alt={picture.FileName}
-												fill
-												className="object-cover group-hover:scale-105 transition-transform duration-200"
-												onError={(e) => {
-													const target = e.target as HTMLImageElement;
-													target.src = '/placeholder-image.jpg';
-												}}
-											/>
-											<div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
-												<div className="opacity-0 group-hover:opacity-100 bg-white bg-opacity-90 text-gray-800 px-3 py-1.5 rounded-lg transition-all duration-200">
-													<span className="text-sm font-medium">Click to view</span>
-												</div>
-											</div>
-										</div>
-
-										{/* Picture Info */}
-										<div className="p-4">
-											<h3 className="text-sm font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-[#0b4d2b] transition-colors">
-												{picture.FileName}
-											</h3>
-											
-											<div className="space-y-1 text-xs text-gray-500">
-												{picture.MainCategory && (
-													<div className="flex items-center">
-														<Folder className="h-3 w-3 mr-1" />
-														<span className="line-clamp-1">{picture.MainCategory}</span>
-													</div>
-												)}
-												{picture.SubCategory && (
-													<div className="flex items-center">
-														<Folder className="h-3 w-3 mr-1" />
-														<span className="line-clamp-1">{picture.SubCategory}</span>
-													</div>
-												)}
-												{picture.EventDate && (
-													<div className="flex items-center">
-														<Calendar className="h-3 w-3 mr-1" />
-														<span>{formatDate(picture.EventDate)}</span>
-													</div>
-												)}
-											</div>
-										</div>
-									</div>
-								</div>
-							))}
-						</div>
-
-						{/* Navigation Arrows */}
-						{carouselPictures.length > 1 && (
-							<>
-								<button
-									onClick={prevPicture}
-									className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-90 hover:bg-opacity-100 text-gray-600 hover:text-gray-900 p-2 rounded-full shadow-lg transition-all duration-200"
-								>
-									<ChevronLeft className="h-5 w-5" />
-								</button>
-								<button
-									onClick={nextPicture}
-									className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-90 hover:bg-opacity-100 text-gray-600 hover:text-gray-900 p-2 rounded-full shadow-lg transition-all duration-200"
-								>
-									<ChevronRight className="h-5 w-5" />
-								</button>
-							</>
-						)}
-
-						{/* Dots Indicator */}
-						{carouselPictures.length > 1 && (
-							<div className="flex justify-center space-x-2 p-4">
-								{carouselPictures.map((_, index) => (
-									<button
-										key={index}
-										onClick={() => setCurrentIndex(index)}
-										className={`w-2 h-2 rounded-full transition-all duration-200 ${
-											index === currentIndex 
-												? 'bg-[#0b4d2b] w-6' 
-												: 'bg-gray-300 hover:bg-gray-400'
-										}`}
-									/>
-								))}
-							</div>
-						)}
-					</div>
-				)}
-			</div>
-			)}
-
-			{/* Quick Stats */}
-			<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-				<div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-					<div className="flex items-center">
-						<div className="p-2 bg-blue-100 rounded-lg">
-							<ImageIcon className="h-6 w-6 text-blue-600" />
-						</div>
-						<div className="ml-4">
-							<p className="text-sm font-medium text-gray-600">Total Pictures</p>
-							<p className="text-2xl font-bold text-gray-900">{pictures.length}</p>
-						</div>
-					</div>
-				</div>
-
-				<div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-					<div className="flex items-center">
-						<div className="p-2 bg-green-100 rounded-lg">
-							<Folder className="h-6 w-6 text-green-600" />
-						</div>
-						<div className="ml-4">
-							<p className="text-sm font-medium text-gray-600">Categories</p>
-							<p className="text-2xl font-bold text-gray-900">
-								{new Set(pictures.map(p => p.MainCategory)).size}
-							</p>
-						</div>
-					</div>
-				</div>
-
-				<div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-					<div className="flex items-center">
-						<div className="p-2 bg-purple-100 rounded-lg">
-							<Calendar className="h-6 w-6 text-purple-600" />
-						</div>
-						<div className="ml-4">
-							<p className="text-sm font-medium text-gray-600">Recent Activity</p>
-							<p className="text-2xl font-bold text-gray-900">
-								{pictures.filter(p => p.EventDate).length}
-							</p>
-						</div>
-					</div>
-				</div>
-			</div>
-
-
 
 			{/* Analytics Graphs Section */}
 			<div className="space-y-8">
@@ -1059,6 +1009,231 @@ export default function DashboardPage() {
 								</div>
 							);
 						})()}
+					</div>
+				</div>
+			</div>
+
+			{/* GIS Report */}
+			<div className="bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden">
+				<div className="p-6 border-b border-gray-200">
+					<div className="flex items-center justify-between">
+						<div>
+							<h2 className="text-xl font-semibold text-gray-900">GIS Report</h2>
+							<p className="text-sm text-gray-600 mt-1">Interactive online GIS maps with boundaries</p>
+						</div>
+						<Link 
+							href="/dashboard/maps/kpk-dik-bannu"
+							className="inline-flex items-center px-4 py-2 text-sm font-medium text-[#0b4d2b] bg-[#0b4d2b]/10 rounded-lg hover:bg-[#0b4d2b]/20 transition-colors"
+						>
+							<ExternalLink className="h-4 w-4 mr-2" />
+							View Full Maps
+						</Link>
+					</div>
+				</div>
+				<div className="p-6">
+					<GISMapWithBoundaries />
+				</div>
+			</div>
+
+			{/* Project Activities Carousel Section */}
+			<div className="bg-gradient-to-r from-white to-gray-50 rounded-xl border border-gray-200 shadow-lg overflow-hidden">
+				<div className="p-6 border-b border-gray-200">
+					<div className="flex items-center justify-between">
+						<div>
+							<h2 className="text-xl font-semibold text-gray-900">Project Activities</h2>
+							<p className="text-sm text-gray-600 mt-1">Click on any picture to view more details</p>
+							{/* Debug info - remove after fixing */}
+							{process.env.NODE_ENV === 'development' && (
+								<p className="text-xs text-gray-500 mt-1">
+									Debug: {pictures.length} pictures loaded | Current index: {currentIndex}
+									{pictures.length > 0 && (
+										<span> | First image URL: {getImageUrl(pictures[0]?.FilePath || null)}</span>
+									)}
+								</p>
+							)}
+						</div>
+						<div className="flex items-center space-x-2">
+							<button
+								onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+								className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+									isAutoPlaying 
+										? 'bg-green-100 text-green-800 hover:bg-green-200' 
+										: 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+								}`}
+							>
+								{isAutoPlaying ? 'Auto Play ON' : 'Auto Play OFF'}
+							</button>
+							<Link
+								href="/dashboard/pictures"
+								className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-[#0b4d2b] bg-[#0b4d2b]/10 rounded-lg hover:bg-[#0b4d2b]/20 transition-colors"
+							>
+								<ExternalLink className="h-3 w-3 mr-1" />
+								View All
+							</Link>
+						</div>
+					</div>
+				</div>
+
+				{carouselPictures.length === 0 ? (
+					<div className="p-12 text-center">
+						<ImageIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+						<h3 className="text-lg font-medium text-gray-900 mb-2">No pictures available</h3>
+						<p className="text-gray-600">Pictures will appear here once they are uploaded</p>
+					</div>
+				) : (
+					<div className="relative overflow-hidden">
+						{/* Carousel Container */}
+						<div className="flex transition-transform duration-500 ease-in-out" style={{ transform: `translateX(-${currentIndex * 25}%)` }}>
+							{carouselPictures.map((picture, index) => (
+								<div key={`${picture.FileName}-${index}`} className="w-1/4 flex-shrink-0 p-4">
+									<div
+										onClick={() => handlePictureClick(picture)}
+										className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 group cursor-pointer overflow-hidden"
+									>
+										{/* Image */}
+										<div className="aspect-video bg-gray-100 relative overflow-hidden">
+											{getImageUrl(picture.FilePath) ? (
+												<img
+													src={getImageUrl(picture.FilePath)}
+													alt={picture.FileName || 'Project activity image'}
+													className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+													onError={(e) => {
+														console.error('Image load error for:', picture.FileName, 'URL:', getImageUrl(picture.FilePath));
+														const target = e.target as HTMLImageElement;
+														target.style.display = 'none';
+														// Show placeholder
+														const parent = target.parentElement;
+														if (parent) {
+															const placeholder = document.createElement('div');
+															placeholder.className = 'w-full h-full flex items-center justify-center text-gray-400';
+															parent.appendChild(placeholder);
+														}
+													}}
+													onLoad={() => {
+														console.log('Image loaded successfully:', picture.FileName, 'URL:', getImageUrl(picture.FilePath));
+													}}
+												/>
+											) : (
+												<div className="w-full h-full flex items-center justify-center text-gray-400">
+													<ImageIcon className="h-12 w-12" />
+												</div>
+											)}
+											<div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
+												<div className="opacity-0 group-hover:opacity-100 bg-white bg-opacity-90 text-gray-800 px-3 py-1.5 rounded-lg transition-all duration-200">
+													<span className="text-sm font-medium">Click to view</span>
+												</div>
+											</div>
+										</div>
+
+										{/* Picture Info */}
+										<div className="p-4">
+											<h3 className="text-sm font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-[#0b4d2b] transition-colors">
+												{picture.FileName}
+											</h3>
+											
+											<div className="space-y-1 text-xs text-gray-500">
+												{picture.MainCategory && (
+													<div className="flex items-center">
+														<Folder className="h-3 w-3 mr-1" />
+														<span className="line-clamp-1">{picture.MainCategory}</span>
+													</div>
+												)}
+												{picture.SubCategory && (
+													<div className="flex items-center">
+														<Folder className="h-3 w-3 mr-1" />
+														<span className="line-clamp-1">{picture.SubCategory}</span>
+													</div>
+												)}
+												{picture.EventDate && (
+													<div className="flex items-center">
+														<Calendar className="h-3 w-3 mr-1" />
+														<span>{formatDate(picture.EventDate)}</span>
+													</div>
+												)}
+											</div>
+										</div>
+									</div>
+								</div>
+							))}
+						</div>
+
+						{/* Navigation Arrows */}
+						{carouselPictures.length > 1 && (
+							<>
+								<button
+									onClick={prevPicture}
+									className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-90 hover:bg-opacity-100 text-gray-600 hover:text-gray-900 p-2 rounded-full shadow-lg transition-all duration-200"
+								>
+									<ChevronLeft className="h-5 w-5" />
+								</button>
+								<button
+									onClick={nextPicture}
+									className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-90 hover:bg-opacity-100 text-gray-600 hover:text-gray-900 p-2 rounded-full shadow-lg transition-all duration-200"
+								>
+									<ChevronRight className="h-5 w-5" />
+								</button>
+							</>
+						)}
+
+						{/* Dots Indicator */}
+						{carouselPictures.length > 1 && (
+							<div className="flex justify-center space-x-2 p-4">
+								{carouselPictures.map((_, index) => (
+									<button
+										key={index}
+										onClick={() => setCurrentIndex(index)}
+										className={`w-2 h-2 rounded-full transition-all duration-200 ${
+											index === currentIndex 
+												? 'bg-[#0b4d2b] w-6' 
+												: 'bg-gray-300 hover:bg-gray-400'
+										}`}
+									/>
+								))}
+							</div>
+						)}
+					</div>
+				)}
+			</div>
+
+			{/* Quick Stats */}
+			<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+				<div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+					<div className="flex items-center">
+						<div className="p-2 bg-blue-100 rounded-lg">
+							<ImageIcon className="h-6 w-6 text-blue-600" />
+						</div>
+						<div className="ml-4">
+							<p className="text-sm font-medium text-gray-600">Total Pictures</p>
+							<p className="text-2xl font-bold text-gray-900">{pictures.length}</p>
+						</div>
+					</div>
+				</div>
+
+				<div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+					<div className="flex items-center">
+						<div className="p-2 bg-green-100 rounded-lg">
+							<Folder className="h-6 w-6 text-green-600" />
+						</div>
+						<div className="ml-4">
+							<p className="text-sm font-medium text-gray-600">Categories</p>
+							<p className="text-2xl font-bold text-gray-900">
+								{new Set(pictures.map(p => p.MainCategory)).size}
+							</p>
+						</div>
+					</div>
+				</div>
+
+				<div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+					<div className="flex items-center">
+						<div className="p-2 bg-purple-100 rounded-lg">
+							<Calendar className="h-6 w-6 text-purple-600" />
+						</div>
+						<div className="ml-4">
+							<p className="text-sm font-medium text-gray-600">Recent Activity</p>
+							<p className="text-2xl font-bold text-gray-900">
+								{pictures.filter(p => p.EventDate).length}
+							</p>
+						</div>
 					</div>
 				</div>
 			</div>

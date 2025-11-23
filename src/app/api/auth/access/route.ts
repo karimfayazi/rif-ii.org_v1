@@ -33,8 +33,8 @@ export async function GET(request: NextRequest) {
 		}
 		
 		const accessLevel = result.recordset[0].access_level;
-		// Check if access_level is 'admin' or 'Admin' (case-insensitive)
-		const isAdmin = accessLevel && (accessLevel.toLowerCase() === 'admin');
+		// Check if access_level is exactly 'Admin' (case-sensitive as per database requirement)
+		const isAdmin = accessLevel === 'Admin';
 		
 		return NextResponse.json({
 			success: true,
