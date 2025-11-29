@@ -32,6 +32,13 @@ type DashboardResponse =
       message?: string;
     };
 
+type DashboardData = {
+  success: true;
+  overall: OverallStats;
+  byEventType: BreakdownRow[];
+  byDistrict: BreakdownRow[];
+};
+
 function getMaxValue(rows: BreakdownRow[], field: keyof BreakdownRow): number {
   return rows.reduce((max, row) => {
     const value = (row[field] as number) || 0;
@@ -45,7 +52,7 @@ function getPercentage(part: number, total: number): string {
 }
 
 export default function TrainingCapacityBuildingDashboardPage() {
-  const [data, setData] = useState<DashboardResponse | null>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEventType, setSelectedEventType] = useState<BreakdownRow | null>(null);
