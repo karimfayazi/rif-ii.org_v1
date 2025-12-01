@@ -10,6 +10,13 @@ type AccessPermissions = {
 	canUpload: boolean;
 	canManageCategories: boolean;
 	canManageSubCategories: boolean;
+	accessAdd: boolean;
+	accessEdit: boolean;
+	accessDelete: boolean;
+	accessReports: boolean;
+	userLoginLogs: boolean;
+	trackingSection: boolean;
+	trainingSection: boolean;
 	loading: boolean;
 	error: string | null;
 };
@@ -21,6 +28,13 @@ export function useAccess(userId?: string | null) {
 		canUpload: false,
 		canManageCategories: false,
 		canManageSubCategories: false,
+		accessAdd: false,
+		accessEdit: false,
+		accessDelete: false,
+		accessReports: false,
+		userLoginLogs: false,
+		trackingSection: true,
+		trainingSection: true,
 		loading: true,
 		error: null
 	});
@@ -52,6 +66,13 @@ export function useAccess(userId?: string | null) {
 					canUpload: data.canUpload,
 					canManageCategories: data.canManageCategories,
 					canManageSubCategories: data.canManageSubCategories,
+					accessAdd: data.accessAdd === true || data.accessAdd === 1,
+					accessEdit: data.accessEdit === true || data.accessEdit === 1,
+					accessDelete: data.accessDelete === true || data.accessDelete === 1,
+					accessReports: data.accessReports === true || data.accessReports === 1,
+					userLoginLogs: data.userLoginLogs === true || data.userLoginLogs === 1,
+					trackingSection: data.trackingSection !== false,
+					trainingSection: data.trainingSection !== false,
 					loading: false,
 					error: null
 				});
@@ -62,6 +83,13 @@ export function useAccess(userId?: string | null) {
 					canUpload: false,
 					canManageCategories: false,
 					canManageSubCategories: false,
+					accessAdd: false,
+					accessEdit: false,
+					accessDelete: false,
+					accessReports: false,
+					userLoginLogs: false,
+					trackingSection: false,
+					trainingSection: false,
 					loading: false,
 					error: data.message || "Failed to check access"
 				});
@@ -73,6 +101,13 @@ export function useAccess(userId?: string | null) {
 				canUpload: false,
 				canManageCategories: false,
 				canManageSubCategories: false,
+				accessAdd: false,
+				accessEdit: false,
+				accessDelete: false,
+				accessReports: false,
+				userLoginLogs: false,
+				trackingSection: false,
+				trainingSection: false,
 				loading: false,
 				error: "Error checking access permissions"
 			});

@@ -47,7 +47,7 @@ export default function TrainingParticipantsPage() {
 	const router = useRouter();
 	const { user, getUserId } = useAuth();
 	const userId = user?.id || getUserId();
-	const { isAdmin } = useAccess(userId);
+	const { accessAdd, accessEdit, accessDelete, trainingSection, loading: accessLoading } = useAccess(userId);
 	
 	const [participants, setParticipants] = useState<WorkshopParticipant[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -57,6 +57,9 @@ export default function TrainingParticipantsPage() {
 	const [selectedGender, setSelectedGender] = useState("");
 	const [selectedOrganizationDepartment, setSelectedOrganizationDepartment] = useState("");
 	const [selectedWorkshopTrainingName, setSelectedWorkshopTrainingName] = useState("");
+	const [participantName, setParticipantName] = useState("");
+	const [cnicNumber, setCnicNumber] = useState("");
+	const [contactNumber, setContactNumber] = useState("");
 	const [tehsils, setTehsils] = useState<string[]>([]);
 	const [organizationDepartments, setOrganizationDepartments] = useState<string[]>([]);
 	const [workshopTrainingNames, setWorkshopTrainingNames] = useState<string[]>([]);
@@ -111,6 +114,9 @@ export default function TrainingParticipantsPage() {
 		setSelectedGender("");
 		setSelectedOrganizationDepartment("");
 		setSelectedWorkshopTrainingName("");
+		setParticipantName("");
+		setCnicNumber("");
+		setContactNumber("");
 	};
 
 	const formatNumber = (num: number | null | undefined) => {
@@ -173,8 +179,11 @@ export default function TrainingParticipantsPage() {
 		const matchesGender = !selectedGender || item.gender === selectedGender;
 		const matchesOrganizationDepartment = !selectedOrganizationDepartment || item.organization_department === selectedOrganizationDepartment;
 		const matchesWorkshopTrainingName = !selectedWorkshopTrainingName || item.workshop_training_name === selectedWorkshopTrainingName;
+		const matchesParticipantName = !participantName || (item.participant_name && item.participant_name.toLowerCase().includes(participantName.toLowerCase()));
+		const matchesCnicNumber = !cnicNumber || (item.cnic_number && item.cnic_number.toLowerCase().includes(cnicNumber.toLowerCase()));
+		const matchesContactNumber = !contactNumber || (item.contact_number && item.contact_number.toLowerCase().includes(contactNumber.toLowerCase()));
 		
-		return matchesDistrict && matchesTehsil && matchesGender && matchesOrganizationDepartment && matchesWorkshopTrainingName;
+		return matchesDistrict && matchesTehsil && matchesGender && matchesOrganizationDepartment && matchesWorkshopTrainingName && matchesParticipantName && matchesCnicNumber && matchesContactNumber;
 	});
 
 	// Calculate summary statistics
@@ -183,7 +192,7 @@ export default function TrainingParticipantsPage() {
 	const totalFemale = filteredData.filter(item => item.gender === "Female").length;
 	const uniqueWorkshops = new Set(filteredData.map(item => item.workshop_training_name).filter(Boolean)).size;
 
-	if (loading) {
+	if (accessLoading || loading) {
 		return (
 			<div className="space-y-6">
 				<div>
@@ -193,6 +202,21 @@ export default function TrainingParticipantsPage() {
 				<div className="flex items-center justify-center py-12">
 					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0b4d2b]"></div>
 					<span className="ml-3 text-gray-600">Loading participants data...</span>
+				</div>
+			</div>
+		);
+	}
+
+	if (!trainingSection) {
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-2xl font-bold text-gray-900">Training Participants</h1>
+					<p className="text-gray-600 mt-2">View workshop training participants</p>
+				</div>
+				<div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+					<h2 className="text-xl font-semibold text-red-900 mb-2">Access Denied</h2>
+					<p className="text-red-700">You do not have access to the Training Section. Please contact your administrator.</p>
 				</div>
 			</div>
 		);
@@ -234,13 +258,15 @@ export default function TrainingParticipantsPage() {
 						<FileDown className="h-4 w-4 mr-2" />
 						Export
 					</button>
-					<button
-						onClick={() => router.push('/dashboard/training/participants/add')}
-						className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-					>
-						<Users className="h-4 w-4 mr-2" />
-						Add Records
-					</button>
+					{accessAdd && trainingSection && (
+						<button
+							onClick={() => router.push('/dashboard/training/participants/add')}
+							className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+						>
+							<Users className="h-4 w-4 mr-2" />
+							Add Records
+						</button>
+					)}
 					<button
 						onClick={() => router.push('/dashboard/training/dashboard')}
 						className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
@@ -359,6 +385,48 @@ export default function TrainingParticipantsPage() {
 								</option>
 							))}
 						</select>
+					</div>
+
+					{/* Participant Name Filter */}
+					<div>
+						<label className="block text-sm font-medium text-gray-700 mb-2">
+							Participant Name
+						</label>
+						<input
+							type="text"
+							value={participantName}
+							onChange={(e) => setParticipantName(e.target.value)}
+							placeholder="Search by name..."
+							className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
+						/>
+					</div>
+
+					{/* CNIC Number Filter */}
+					<div>
+						<label className="block text-sm font-medium text-gray-700 mb-2">
+							CNIC Number
+						</label>
+						<input
+							type="text"
+							value={cnicNumber}
+							onChange={(e) => setCnicNumber(e.target.value)}
+							placeholder="Search by CNIC..."
+							className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
+						/>
+					</div>
+
+					{/* Contact Number Filter */}
+					<div>
+						<label className="block text-sm font-medium text-gray-700 mb-2">
+							Contact Number
+						</label>
+						<input
+							type="text"
+							value={contactNumber}
+							onChange={(e) => setContactNumber(e.target.value)}
+							placeholder="Search by contact..."
+							className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
+						/>
 					</div>
 				</div>
 
@@ -525,39 +593,43 @@ export default function TrainingParticipantsPage() {
 												>
 													<Eye className="h-4 w-4" />
 												</button>
-												{isAdmin && (
+												{trainingSection && (
 													<>
-														<button
-															onClick={() => router.push(`/dashboard/training/participants/add?sn=${item.sn}`)}
-															className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-															title="Edit"
-														>
-															<Edit className="h-4 w-4" />
-														</button>
-														<button
-															onClick={async () => {
-																if (confirm("Are you sure you want to delete this participant record?")) {
-																	try {
-																		const response = await fetch(`/api/training/participants/delete?sn=${item.sn}`, {
-																			method: 'DELETE'
-																		});
-																		const data = await response.json();
-																		if (data.success) {
-																			fetchParticipants();
-																		} else {
-																			alert(data.message || "Failed to delete record");
+														{accessEdit && (
+															<button
+																onClick={() => router.push(`/dashboard/training/participants/add?sn=${item.sn}`)}
+																className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+																title="Edit"
+															>
+																<Edit className="h-4 w-4" />
+															</button>
+														)}
+														{accessDelete && (
+															<button
+																onClick={async () => {
+																	if (confirm("Are you sure you want to delete this participant record?")) {
+																		try {
+																			const response = await fetch(`/api/training/participants/delete?sn=${item.sn}`, {
+																				method: 'DELETE'
+																			});
+																			const data = await response.json();
+																			if (data.success) {
+																				fetchParticipants();
+																			} else {
+																				alert(data.message || "Failed to delete record");
+																			}
+																		} catch (err) {
+																			console.error("Error deleting participant:", err);
+																			alert("Error deleting participant record");
 																		}
-																	} catch (err) {
-																		console.error("Error deleting participant:", err);
-																		alert("Error deleting participant record");
 																	}
-																}
-															}}
-															className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-															title="Delete"
-														>
-															<Trash2 className="h-4 w-4" />
-														</button>
+																}}
+																className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+																title="Delete"
+															>
+																<Trash2 className="h-4 w-4" />
+															</button>
+														)}
 													</>
 												)}
 											</div>
@@ -727,7 +799,7 @@ export default function TrainingParticipantsPage() {
 							>
 								Close
 							</button>
-							{isAdmin && (
+							{accessEdit && trainingSection && (
 								<button
 									onClick={() => {
 										setViewingParticipant(null);

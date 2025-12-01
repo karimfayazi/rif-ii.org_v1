@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useAccess } from "@/hooks/useAccess";
 import {
     LayoutDashboard,
     Map,
@@ -21,6 +23,7 @@ import {
     FolderPlus,
     Menu,
     X,
+    Layers,
 } from "lucide-react";
 
 type SidebarProps = {
@@ -105,6 +108,7 @@ const GROUPS: NavGroup[] = [
 		divider: true,
 		items: [
 			{ label: "Setting", href: "/dashboard/settings", icon: Settings },
+			{ label: "KML GIS Maps", href: "/dashboard/kml-gis-maps", icon: Layers },
 			{ label: "Logout", href: "/logout", icon: LogOut },
 		],
 	},
@@ -112,6 +116,9 @@ const GROUPS: NavGroup[] = [
 
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     const pathname = usePathname();
+    const { user, getUserId } = useAuth();
+    const userId = user?.id || getUserId();
+    const { trackingSection, trainingSection } = useAccess(userId);
     const [expandedMenus, setExpandedMenus] = useState<{ [key: string]: boolean }>({});
     const [expandedSubMenus, setExpandedSubMenus] = useState<{ [key: string]: boolean }>({});
     
@@ -143,10 +150,26 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 					)}
 				</button>
 			</div>
-			{GROUPS.map((group, groupIdx) => (
+			{GROUPS.map((group, groupIdx) => {
+				// Filter items based on permissions
+				const filteredItems = group.items.filter((item) => {
+					// Hide Tracking Sheet and Tracking-Dashboard if trackingSection is false
+					if ((item.label === "Tracking Sheet" || item.label === "Tracking-Dashboard") && !trackingSection) {
+						return false;
+					}
+					// Hide Training section if trainingSection is false
+					if (item.label === "Training, Capacity Building & Awareness" && !trainingSection) {
+						return false;
+					}
+					return true;
+				});
+
+				if (filteredItems.length === 0) return null;
+
+				return (
 				<div key={groupIdx} className="mb-3 last:mb-0">
 					<ul className="space-y-1">
-						{group.items.map((item, itemIdx) => {
+						{filteredItems.map((item, itemIdx) => {
 							const Icon = item.icon;
 							const isLogout = item.label === "Logout";
 							const hasSubMenus = item.subMenus && item.subMenus.length > 0;
@@ -322,7 +345,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 						<div className="my-3 border-t border-gray-300"></div>
 					)}
 				</div>
-			))}
+				);
+			})}
         </nav>
 	);
 }

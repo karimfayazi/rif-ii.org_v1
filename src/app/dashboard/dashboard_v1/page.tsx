@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { TrendingUp, Activity, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useAccess } from "@/hooks/useAccess";
 
 type OutputWeightage = {
 	OutputID: string;
@@ -18,6 +20,10 @@ type ActivityProgress = {
 };
 
 export default function DashboardV1Page() {
+	const { user, getUserId } = useAuth();
+	const userId = user?.id || getUserId();
+	const { trackingSection, loading: accessLoading } = useAccess(userId);
+	
 	const [outputWeightage, setOutputWeightage] = useState<OutputWeightage[]>([]);
 	const [activityProgress, setActivityProgress] = useState<ActivityProgress[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -65,7 +71,7 @@ export default function DashboardV1Page() {
 		}
 	};
 
-	if (loading) {
+	if (accessLoading || loading) {
 		return (
 			<div className="space-y-6">
 				<div>
@@ -74,6 +80,20 @@ export default function DashboardV1Page() {
 				<div className="flex items-center justify-center py-12">
 					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0b4d2b]"></div>
 					<span className="ml-3 text-gray-600">Loading...</span>
+				</div>
+			</div>
+		);
+	}
+
+	if (!trackingSection) {
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-2xl font-bold text-gray-900">Dashboard - Process Tracking</h1>
+				</div>
+				<div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+					<h2 className="text-xl font-semibold text-red-900 mb-2">Access Denied</h2>
+					<p className="text-red-700">You do not have access to the Tracking Section. Please contact your administrator.</p>
 				</div>
 			</div>
 		);

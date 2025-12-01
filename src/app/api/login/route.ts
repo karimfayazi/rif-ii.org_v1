@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
 				region: user.region,
 				contact_no: user.contact_no,
 				access_level: user.access_level,
-				password: user.password
+				password: user.password,
+				tracking_section: user.Tracking_Section ?? true,
+				training_section: user.Training_Section ?? true
 			},
 			full_name: user.full_name
 		});

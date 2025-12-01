@@ -9,7 +9,11 @@ import {
 	CheckCircle, 
 	Loader2, 
 	ArrowRight,
-	ArrowLeft as PrevIcon
+	ArrowLeft as PrevIcon,
+	Upload,
+	X,
+	FileText,
+	Image as ImageIcon
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAccess } from "@/hooks/useAccess";
@@ -28,6 +32,7 @@ type TrainingFormData = {
 	subNo?: string;
 	subActivityName?: string;
 	eventType?: string;
+	sector?: string;
 	venue?: string;
 	locationTehsil?: string;
 	district?: string;
@@ -56,6 +61,7 @@ type TrainingFormData = {
 	activityCompletionReportLink?: string;
 	participantListAttachment?: string;
 	pictureAttachment?: string;
+	externalLinks?: string;
 	remarks?: string;
 	dataCompilerName?: string;
 	dataVerifiedBy?: string;
@@ -69,7 +75,7 @@ export default function AddTrainingPage() {
 	
 	const { user, getUserId } = useAuth();
 	const userId = user?.id || getUserId();
-	const { isAdmin, loading: accessLoading } = useAccess(userId);
+	const { accessAdd, trainingSection, loading: accessLoading } = useAccess(userId);
 
 	const [formData, setFormData] = useState<TrainingFormData>({});
 	const [loading, setLoading] = useState(false);
@@ -78,6 +84,34 @@ export default function AddTrainingPage() {
 	const [success, setSuccess] = useState(false);
 	const [currentStep, setCurrentStep] = useState(1);
 	const totalSteps = 5;
+	
+	// File upload states
+	const [reportFile, setReportFile] = useState<File | null>(null);
+	const [participantListFile, setParticipantListFile] = useState<File | null>(null);
+	const [pictureFiles, setPictureFiles] = useState<File[]>([]);
+	const [uploadingFiles, setUploadingFiles] = useState(false);
+
+	// Tehsils data based on district
+	const districtTehsils: Record<string, string[]> = {
+		'DIK': [
+			'Dera Ismail Khan Tehsil',
+			'Paharpur Tehsil',
+			'Paroa Tehsil',
+			'Kulachi Tehsil',
+			'Daraban Tehsil',
+			'Local Area (Ex-FR DI Khan) Tehsil'
+		],
+		'Bannu': [
+			'Bannu Tehsil',
+			'Domel Tehsil',
+			'Kakki Tehsil',
+			'Baka Khel Tehsil',
+			'Miryan Tehsil',
+			'Wazir Tehsil'
+		]
+	};
+
+	const availableTehsils = formData.district ? (districtTehsils[formData.district] || []) : [];
 
 	// Fetch existing data if editing
 	useEffect(() => {
@@ -101,6 +135,7 @@ export default function AddTrainingPage() {
 					subNo: training.SubNo || "",
 					subActivityName: training.SubActivityName || "",
 					eventType: training.EventType || "",
+					sector: training.Sector || "",
 					venue: training.Venue || "",
 					locationTehsil: training.LocationTehsil || "",
 					district: training.District || "",
@@ -141,6 +176,7 @@ export default function AddTrainingPage() {
 					activityCompletionReportLink: training.ActivityCompletionReportLink || "",
 					participantListAttachment: training.ParticipantListAttachment || "",
 					pictureAttachment: training.PictureAttachment || "",
+					externalLinks: training.External_Links || "",
 					remarks: training.Remarks || "",
 					dataCompilerName: training.DataCompilerName || "",
 					dataVerifiedBy: training.DataVerifiedBy || "",
@@ -156,10 +192,20 @@ export default function AddTrainingPage() {
 
 	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
 		const { name, value, type } = e.target;
-		setFormData(prev => ({
-			...prev,
-			[name]: type === 'number' ? (value === '' ? 0 : parseFloat(value)) : value
-		}));
+		
+		// Clear tehsil when district changes
+		if (name === 'district') {
+			setFormData(prev => ({
+				...prev,
+				[name]: value,
+				locationTehsil: '' // Clear tehsil when district changes
+			}));
+		} else {
+			setFormData(prev => ({
+				...prev,
+				[name]: type === 'number' ? (value === '' ? 0 : parseFloat(value)) : value
+			}));
+		}
 	};
 
 	const nextStep = () => {
@@ -174,6 +220,93 @@ export default function AddTrainingPage() {
 		}
 	};
 
+	const uploadFile = async (fileType: 'report' | 'participantList' | 'pictures', file?: File, files?: File[]) => {
+		const uploadFormData = new FormData();
+		uploadFormData.append('fileType', fileType);
+		uploadFormData.append('trainingTitle', formData.trainingTitle || '');
+		uploadFormData.append('trainingSN', formData.id?.toString() || '');
+
+		if (fileType === 'pictures' && files) {
+			files.forEach((f) => {
+				uploadFormData.append('files', f);
+			});
+		} else if (file) {
+			uploadFormData.append('file', file);
+		}
+
+		const response = await fetch('/api/training/upload', {
+			method: 'POST',
+			body: uploadFormData,
+		});
+
+		const result = await response.json();
+		if (!result.success) {
+			throw new Error(result.message || 'Failed to upload file');
+		}
+
+		return result.filePath || result.uploadedFiles?.[0]?.filePath || '';
+	};
+
+	const validateForm = (): string | null => {
+		// Validate Step 1: Basic Information
+		if (!formData.trainingTitle || formData.trainingTitle.trim() === '') {
+			return 'Training Title is required';
+		}
+		if (!formData.eventType || formData.eventType.trim() === '') {
+			return 'Event Type is required';
+		}
+		if (!formData.output || formData.output.trim() === '') {
+			return 'Output is required';
+		}
+		if (!formData.subNo || formData.subNo.trim() === '') {
+			return 'Sub No is required';
+		}
+		if (!formData.subActivityName || formData.subActivityName.trim() === '') {
+			return 'Sub Activity Name is required';
+		}
+		if (!formData.trainingFacilitatorName || formData.trainingFacilitatorName.trim() === '') {
+			return 'Training Facilitator is required';
+		}
+
+		// Validate Step 2: Location & Dates
+		if (!formData.district || formData.district.trim() === '') {
+			return 'District is required';
+		}
+		if (!formData.locationTehsil || formData.locationTehsil.trim() === '') {
+			return 'Location Tehsil is required';
+		}
+		if (!formData.venue || formData.venue.trim() === '') {
+			return 'Venue is required';
+		}
+		if (!formData.startDate || formData.startDate.trim() === '') {
+			return 'Start Date is required';
+		}
+		if (!formData.endDate || formData.endDate.trim() === '') {
+			return 'End Date is required';
+		}
+
+		// Validate Step 5: File Uploads (required for both new and edit)
+		const hasReport = reportFile || (formData.activityCompletionReportLink && formData.activityCompletionReportLink.trim() !== '');
+		if (!hasReport) {
+			return 'Activity Completion Report is required. Please upload a PDF or DOC file.';
+		}
+		
+		const hasParticipantList = participantListFile || (formData.participantListAttachment && formData.participantListAttachment.trim() !== '');
+		if (!hasParticipantList) {
+			return 'Participant List Attachment is required. Please upload a PDF or DOC file.';
+		}
+		
+		const hasPictures = (pictureFiles.length >= 5) || (formData.pictureAttachment && formData.pictureAttachment.trim() !== '');
+		if (!hasPictures) {
+			if (pictureFiles.length > 0 && pictureFiles.length < 5) {
+				return 'At least 5 pictures are required. Please upload more pictures.';
+			}
+			return 'At least 5 pictures are required. Please upload pictures.';
+		}
+
+		return null;
+	};
+
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setLoading(true);
@@ -181,12 +314,83 @@ export default function AddTrainingPage() {
 		setSuccess(false);
 
 		try {
-			const url = isEditMode ? '/api/training/update' : '/api/training/add';
-			const method = isEditMode ? 'PUT' : 'POST';
+			// Validate all required fields
+			const validationError = validateForm();
+			if (validationError) {
+				setError(`Please complete data before save. ${validationError}`);
+				setLoading(false);
+				return;
+			}
+
+			let trainingSN = formData.id?.toString() || '';
+
+			// For new records, save first to get SN
+			if (!isEditMode) {
+				const url = '/api/training/add';
+				const dataToSave = {
+					...formData,
+					activityCompletionReportLink: formData.activityCompletionReportLink || '',
+					participantListAttachment: formData.participantListAttachment || '',
+					pictureAttachment: formData.pictureAttachment || '',
+					dataCompilerName: formData.dataCompilerName || userId
+				};
+
+				const response = await fetch(url, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(dataToSave),
+				});
+
+				const result = await response.json();
+
+				if (!result.success) {
+					throw new Error(result.message || 'Failed to save record');
+				}
+
+				// Get the SN from the response
+				if (result.sn) {
+					trainingSN = result.sn.toString();
+					setFormData(prev => ({ ...prev, id: parseInt(trainingSN) }));
+				} else {
+					throw new Error('Failed to get record ID');
+				}
+			}
+
+			// Upload files
+			setUploadingFiles(true);
+			let reportPath = formData.activityCompletionReportLink || '';
+			let participantListPath = formData.participantListAttachment || '';
+			let picturePath = formData.pictureAttachment || '';
+
+			// Upload Activity Completion Report
+			if (reportFile) {
+				reportPath = await uploadFile('report', reportFile);
+			}
+
+			// Upload Participant List
+			if (participantListFile) {
+				participantListPath = await uploadFile('participantList', participantListFile);
+			}
+
+			// Upload Pictures (at least 5 required)
+			if (pictureFiles.length >= 5) {
+				picturePath = await uploadFile('pictures', undefined, pictureFiles);
+			}
+
+			setUploadingFiles(false);
+
+			// Update training event with file paths (for both new and edit)
+			const url = isEditMode ? '/api/training/update' : '/api/training/update';
+			const method = 'PUT';
 			
 			const dataToSave = {
-				...(isEditMode && { id: formData.id }),
+				id: isEditMode ? formData.id : parseInt(trainingSN),
 				...formData,
+				activityCompletionReportLink: reportPath,
+				participantListAttachment: participantListPath,
+				pictureAttachment: picturePath,
 				dataCompilerName: formData.dataCompilerName || userId
 			};
 
@@ -210,6 +414,7 @@ export default function AddTrainingPage() {
 			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "An error occurred");
+			setUploadingFiles(false);
 		} finally {
 			setLoading(false);
 		}
@@ -237,13 +442,31 @@ export default function AddTrainingPage() {
 		);
 	}
 
-	if (!isAdmin) {
+	if (!trainingSection) {
 		return (
 			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
 				<div className="text-center">
 					<AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
 					<h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
-					<p className="text-gray-600">You need admin privileges to {isEditMode ? 'edit' : 'add'} training events.</p>
+					<p className="text-gray-600">You do not have access to the Training Section. Please contact your administrator.</p>
+					<button
+						onClick={() => router.push('/dashboard')}
+						className="mt-4 px-4 py-2 bg-[#0b4d2b] text-white rounded-lg hover:bg-[#0a3d24]"
+					>
+						Back to Dashboard
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	if (!accessAdd || !trainingSection) {
+		return (
+			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+				<div className="text-center">
+					<AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+					<h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
+					<p className="text-gray-600">You do not have permission to {isEditMode ? 'edit' : 'add'} training events. Please contact your administrator.</p>
 					<button
 						onClick={() => router.push('/dashboard/training')}
 						className="mt-4 px-4 py-2 bg-[#0b4d2b] text-white rounded-lg hover:bg-[#0a3d24]"
@@ -342,51 +565,69 @@ export default function AddTrainingPage() {
 									/>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>
-									<input
-										type="text"
+									<label className="block text-sm font-medium text-gray-700 mb-1">Event Type *</label>
+									<select
 										name="eventType"
 										value={formData.eventType || ""}
+										onChange={handleInputChange}
+										required
+										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
+									>
+										<option value="">Select Event Type</option>
+										<option value="Workshop">Workshop</option>
+										<option value="Training">Training</option>
+									</select>
+								</div>
+								<div>
+									<label className="block text-sm font-medium text-gray-700 mb-1">Sector</label>
+									<input
+										type="text"
+										name="sector"
+										value={formData.sector || ""}
 										onChange={handleInputChange}
 										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
 									/>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Output</label>
+									<label className="block text-sm font-medium text-gray-700 mb-1">Output *</label>
 									<input
 										type="text"
 										name="output"
 										value={formData.output || ""}
 										onChange={handleInputChange}
+										required
 										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
 									/>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Sub No</label>
+									<label className="block text-sm font-medium text-gray-700 mb-1">Sub No *</label>
 									<input
 										type="text"
 										name="subNo"
 										value={formData.subNo || ""}
 										onChange={handleInputChange}
+										required
 										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
 									/>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Sub Activity Name</label>
+									<label className="block text-sm font-medium text-gray-700 mb-1">Sub Activity Name *</label>
 									<input
 										type="text"
 										name="subActivityName"
 										value={formData.subActivityName || ""}
 										onChange={handleInputChange}
+										required
 										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
 									/>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Training Facilitator</label>
+									<label className="block text-sm font-medium text-gray-700 mb-1">Training Facilitator *</label>
 									<select
 										name="trainingFacilitatorName"
 										value={formData.trainingFacilitatorName || ""}
 										onChange={handleInputChange}
+										required
 										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
 									>
 										<option value="">Select Training Facilitator</option>
@@ -407,52 +648,69 @@ export default function AddTrainingPage() {
 							<h2 className="text-lg font-semibold text-gray-900 mb-4">Location & Dates</h2>
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">District</label>
-									<input
-										type="text"
+									<label className="block text-sm font-medium text-gray-700 mb-1">District *</label>
+									<select
 										name="district"
 										value={formData.district || ""}
 										onChange={handleInputChange}
+										required
 										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
-									/>
+									>
+										<option value="">Select District</option>
+										<option value="DIK">DIK</option>
+										<option value="Bannu">Bannu</option>
+									</select>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Location Tehsil</label>
-									<input
-										type="text"
+									<label className="block text-sm font-medium text-gray-700 mb-1">Location Tehsil *</label>
+									<select
 										name="locationTehsil"
 										value={formData.locationTehsil || ""}
 										onChange={handleInputChange}
-										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
-									/>
+										disabled={!formData.district || availableTehsils.length === 0}
+										required
+										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+									>
+										<option value="">
+											{!formData.district ? "Select District first" : "Select Tehsil"}
+										</option>
+										{availableTehsils.map((tehsil) => (
+											<option key={tehsil} value={tehsil}>
+												{tehsil}
+											</option>
+										))}
+									</select>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Venue</label>
+									<label className="block text-sm font-medium text-gray-700 mb-1">Venue *</label>
 									<input
 										type="text"
 										name="venue"
 										value={formData.venue || ""}
 										onChange={handleInputChange}
+										required
 										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
 									/>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+									<label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
 									<input
 										type="date"
 										name="startDate"
 										value={formData.startDate || ""}
 										onChange={handleInputChange}
+										required
 										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
 									/>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+									<label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
 									<input
 										type="date"
 										name="endDate"
 										value={formData.endDate || ""}
 										onChange={handleInputChange}
+										required
 										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
 									/>
 								</div>
@@ -690,34 +948,203 @@ export default function AddTrainingPage() {
 					{currentStep === 5 && (
 						<div className="space-y-4">
 							<h2 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h2>
-							<div className="space-y-4">
+							<div className="space-y-6">
+								{/* Activity Completion Report Upload */}
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Activity Completion Report Link</label>
-									<input
-										type="text"
-										name="activityCompletionReportLink"
-										value={formData.activityCompletionReportLink || ""}
-										onChange={handleInputChange}
-										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
-									/>
+									<label className="block text-sm font-medium text-gray-700 mb-2">
+										Activity Completion Report (PDF/DOC/DOCX) *
+									</label>
+									<div className="mt-1">
+										{reportFile ? (
+											<div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+												<div className="flex items-center space-x-2">
+													<FileText className="h-5 w-5 text-green-600" />
+													<span className="text-sm text-gray-700">{reportFile.name}</span>
+													<span className="text-xs text-gray-500">
+														({(reportFile.size / 1024 / 1024).toFixed(2)} MB)
+													</span>
+												</div>
+												<button
+													type="button"
+													onClick={() => setReportFile(null)}
+													className="text-red-600 hover:text-red-800"
+												>
+													<X className="h-4 w-4" />
+												</button>
+											</div>
+										) : (
+											<label className="flex flex-col items-center justify-center w-full h-32 border-2 border-red-300 border-dashed rounded-lg cursor-pointer bg-red-50 hover:bg-red-100 transition-colors">
+												<div className="flex flex-col items-center justify-center pt-5 pb-6">
+													<Upload className="h-8 w-8 text-red-400 mb-2" />
+													<p className="text-sm text-red-600 mb-1">
+														<span className="font-semibold">Click to upload</span> or drag and drop
+													</p>
+													<p className="text-xs text-red-500">PDF, DOC, or DOCX (MAX. 10MB) - Required</p>
+												</div>
+												<input
+													type="file"
+													accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+													onChange={(e) => {
+														const file = e.target.files?.[0];
+														if (file) {
+															if (file.size > 10 * 1024 * 1024) {
+																setError('File size must be less than 10MB');
+																return;
+															}
+															setReportFile(file);
+														}
+													}}
+													className="hidden"
+												/>
+											</label>
+										)}
+									</div>
+									{formData.activityCompletionReportLink && !reportFile && (
+										<p className="mt-1 text-xs text-gray-500">
+											Current: {formData.activityCompletionReportLink}
+										</p>
+									)}
+								</div>
+
+								{/* Participant List Upload */}
+								<div>
+									<label className="block text-sm font-medium text-gray-700 mb-2">
+										Participant List Attachment (PDF/DOC/DOCX) *
+									</label>
+									<div className="mt-1">
+										{participantListFile ? (
+											<div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+												<div className="flex items-center space-x-2">
+													<FileText className="h-5 w-5 text-green-600" />
+													<span className="text-sm text-gray-700">{participantListFile.name}</span>
+													<span className="text-xs text-gray-500">
+														({(participantListFile.size / 1024 / 1024).toFixed(2)} MB)
+													</span>
+												</div>
+												<button
+													type="button"
+													onClick={() => setParticipantListFile(null)}
+													className="text-red-600 hover:text-red-800"
+												>
+													<X className="h-4 w-4" />
+												</button>
+											</div>
+										) : (
+											<label className="flex flex-col items-center justify-center w-full h-32 border-2 border-red-300 border-dashed rounded-lg cursor-pointer bg-red-50 hover:bg-red-100 transition-colors">
+												<div className="flex flex-col items-center justify-center pt-5 pb-6">
+													<Upload className="h-8 w-8 text-red-400 mb-2" />
+													<p className="text-sm text-red-600 mb-1">
+														<span className="font-semibold">Click to upload</span> or drag and drop
+													</p>
+													<p className="text-xs text-red-500">PDF, DOC, or DOCX (MAX. 10MB) - Required</p>
+												</div>
+												<input
+													type="file"
+													accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+													onChange={(e) => {
+														const file = e.target.files?.[0];
+														if (file) {
+															if (file.size > 10 * 1024 * 1024) {
+																setError('File size must be less than 10MB');
+																return;
+															}
+															setParticipantListFile(file);
+														}
+													}}
+													className="hidden"
+												/>
+											</label>
+										)}
+									</div>
+									{formData.participantListAttachment && !participantListFile && (
+										<p className="mt-1 text-xs text-gray-500">
+											Current: {formData.participantListAttachment}
+										</p>
+									)}
+								</div>
+
+								{/* Picture Upload (Minimum 5) */}
+								<div>
+									<label className="block text-sm font-medium text-gray-700 mb-2">
+										Picture Attachments (Minimum 5 pictures required) *
+									</label>
+									<div className="mt-1">
+										{pictureFiles.length > 0 && (
+											<div className="mb-3 grid grid-cols-2 md:grid-cols-3 gap-3">
+												{pictureFiles.map((file, index) => (
+													<div key={index} className="relative group">
+														<div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded-lg">
+															<div className="flex items-center space-x-2 flex-1 min-w-0">
+																<ImageIcon className="h-4 w-4 text-green-600 flex-shrink-0" />
+																<span className="text-xs text-gray-700 truncate">{file.name}</span>
+															</div>
+															<button
+																type="button"
+																onClick={() => {
+																	setPictureFiles(pictureFiles.filter((_, i) => i !== index));
+																}}
+																className="text-red-600 hover:text-red-800 flex-shrink-0 ml-2"
+															>
+																<X className="h-4 w-4" />
+															</button>
+														</div>
+													</div>
+												))}
+											</div>
+										)}
+										<label className="flex flex-col items-center justify-center w-full h-32 border-2 border-red-300 border-dashed rounded-lg cursor-pointer bg-red-50 hover:bg-red-100 transition-colors">
+											<div className="flex flex-col items-center justify-center pt-5 pb-6">
+												<Upload className="h-8 w-8 text-red-400 mb-2" />
+												<p className="text-sm text-red-600 mb-1">
+													<span className="font-semibold">Click to upload</span> or drag and drop
+												</p>
+												<p className="text-xs text-red-500">
+													Images (JPEG, PNG, GIF, WEBP) - MAX. 10MB each - Required
+												</p>
+												<p className="text-xs text-red-600 mt-1 font-semibold">
+													{pictureFiles.length} / 5 minimum required
+												</p>
+											</div>
+											<input
+												type="file"
+												accept="image/*"
+												multiple
+												onChange={(e) => {
+													const files = Array.from(e.target.files || []);
+													if (files.length > 0) {
+														const validFiles = files.filter(file => {
+															if (file.size > 10 * 1024 * 1024) {
+																setError(`File ${file.name} is too large (max 10MB)`);
+																return false;
+															}
+															return true;
+														});
+														setPictureFiles([...pictureFiles, ...validFiles]);
+													}
+												}}
+												className="hidden"
+											/>
+										</label>
+									</div>
+									{formData.pictureAttachment && pictureFiles.length === 0 && (
+										<p className="mt-1 text-xs text-gray-500">
+											Current: {formData.pictureAttachment}
+										</p>
+									)}
+									{pictureFiles.length > 0 && pictureFiles.length < 5 && (
+										<p className="mt-1 text-xs text-red-600">
+											Please upload at least {5 - pictureFiles.length} more picture(s)
+										</p>
+									)}
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Participant List Attachment</label>
+									<label className="block text-sm font-medium text-gray-700 mb-1">External Links</label>
 									<input
 										type="text"
-										name="participantListAttachment"
-										value={formData.participantListAttachment || ""}
+										name="externalLinks"
+										value={formData.externalLinks || ""}
 										onChange={handleInputChange}
-										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
-									/>
-								</div>
-								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">Picture Attachment</label>
-									<input
-										type="text"
-										name="pictureAttachment"
-										value={formData.pictureAttachment || ""}
-										onChange={handleInputChange}
+										placeholder="Enter external links (e.g., https://example.com)"
 										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b4d2b] focus:border-transparent"
 									/>
 								</div>
@@ -779,10 +1206,15 @@ export default function AddTrainingPage() {
 							)}
 							<button
 								type="submit"
-								disabled={loading}
-								className="inline-flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+								disabled={loading || uploadingFiles || (pictureFiles.length > 0 && pictureFiles.length < 5)}
+								className="inline-flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 							>
-								{loading ? (
+								{uploadingFiles ? (
+									<>
+										<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+										Uploading files...
+									</>
+								) : loading ? (
 									<>
 										<Loader2 className="h-4 w-4 mr-2 animate-spin" />
 										Saving...

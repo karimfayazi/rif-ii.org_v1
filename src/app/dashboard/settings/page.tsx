@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { 
 	Users, 
 	Filter, 
@@ -16,8 +17,10 @@ import {
 	Shield,
 	RefreshCw,
 	Plus,
-	MoreVertical
+	MoreVertical,
+	AlertCircle
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 type UserData = {
 	username: string;
@@ -31,8 +34,13 @@ type UserData = {
 };
 
 export default function SettingsPage() {
+	const router = useRouter();
+	const { user, getUserId } = useAuth();
+	const userId = user?.id || getUserId();
 	const [users, setUsers] = useState<UserData[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [checkingAccess, setCheckingAccess] = useState(true);
+	const [hasAccess, setHasAccess] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [searchTerm, setSearchTerm] = useState("");
 	const [selectedDepartment, setSelectedDepartment] = useState("");
@@ -42,8 +50,33 @@ export default function SettingsPage() {
 	const [accessLevels, setAccessLevels] = useState<string[]>([]);
 
 	useEffect(() => {
-		fetchUsers();
-	}, []);
+		checkAdminAccess();
+	}, [userId]);
+
+	const checkAdminAccess = async () => {
+		if (!userId) {
+			setCheckingAccess(false);
+			setHasAccess(false);
+			return;
+		}
+
+		try {
+			const response = await fetch(`/api/auth/access?userId=${userId}`);
+			const data = await response.json();
+			
+			if (data.setting === true) {
+				setHasAccess(true);
+				fetchUsers();
+			} else {
+				setHasAccess(false);
+			}
+		} catch (err) {
+			console.error("Error checking access:", err);
+			setHasAccess(false);
+		} finally {
+			setCheckingAccess(false);
+		}
+	};
 
 	const fetchUsers = async () => {
 		try {
@@ -130,6 +163,43 @@ export default function SettingsPage() {
 		return matchesSearch && matchesDepartment && matchesAccessLevel;
 	});
 
+	if (checkingAccess) {
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+					<p className="text-gray-600 mt-2">Manage system users and their access levels</p>
+				</div>
+				<div className="flex items-center justify-center py-12">
+					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0b4d2b]"></div>
+					<span className="ml-3 text-gray-600">Checking access...</span>
+				</div>
+			</div>
+		);
+	}
+
+	if (!hasAccess) {
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+					<p className="text-gray-600 mt-2">Manage system users and their access levels</p>
+				</div>
+				<div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+					<AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+					<h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
+					<p className="text-gray-600">You do not have access to this section. Please contact your administrator.</p>
+					<button
+						onClick={() => router.push('/dashboard')}
+						className="mt-4 px-4 py-2 bg-[#0b4d2b] text-white rounded-lg hover:bg-[#0a3d24] transition-colors"
+					>
+						Back to Dashboard
+					</button>
+				</div>
+			</div>
+		);
+	}
+
 	if (loading) {
 		return (
 			<div className="space-y-6">
@@ -188,7 +258,10 @@ export default function SettingsPage() {
 						<RefreshCw className="h-4 w-4 mr-2" />
 						Refresh
 					</button>
-					<button className="inline-flex items-center px-4 py-2 bg-[#0b4d2b] text-white rounded-lg hover:bg-[#0a3d24] transition-colors">
+					<button 
+						onClick={() => router.push('/dashboard/settings/add')}
+						className="inline-flex items-center px-4 py-2 bg-[#0b4d2b] text-white rounded-lg hover:bg-[#0a3d24] transition-colors"
+					>
 						<Plus className="h-4 w-4 mr-2" />
 						Add User
 					</button>

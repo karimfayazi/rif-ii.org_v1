@@ -43,7 +43,7 @@ export default function AddParticipantPage() {
 	
 	const { user, getUserId } = useAuth();
 	const userId = user?.id || getUserId();
-	const { isAdmin, loading: accessLoading } = useAccess(userId);
+	const { accessAdd, accessEdit, accessDelete, trainingSection, loading: accessLoading } = useAccess(userId);
 
 	const [formData, setFormData] = useState<ParticipantFormData>({});
 	const [loading, setLoading] = useState(false);
@@ -295,6 +295,60 @@ export default function AddParticipantPage() {
 		);
 	}
 
+	if (!trainingSection) {
+		return (
+			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+				<div className="text-center">
+					<AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+					<h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
+					<p className="text-gray-600">You do not have access to the Training Section. Please contact your administrator.</p>
+					<button
+						onClick={() => router.push('/dashboard/training/participants')}
+						className="mt-4 px-4 py-2 bg-[#0b4d2b] text-white rounded-lg hover:bg-[#0a3d24]"
+					>
+						Back to Participants
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	if (isEditMode && !accessEdit) {
+		return (
+			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+				<div className="text-center">
+					<AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+					<h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
+					<p className="text-gray-600">You do not have permission to edit participant records. Please contact your administrator.</p>
+					<button
+						onClick={() => router.push('/dashboard/training/participants')}
+						className="mt-4 px-4 py-2 bg-[#0b4d2b] text-white rounded-lg hover:bg-[#0a3d24]"
+					>
+						Back to Participants
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	if (!isEditMode && !accessAdd) {
+		return (
+			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+				<div className="text-center">
+					<AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+					<h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
+					<p className="text-gray-600">You do not have permission to add participant records. Please contact your administrator.</p>
+					<button
+						onClick={() => router.push('/dashboard/training/participants')}
+						className="mt-4 px-4 py-2 bg-[#0b4d2b] text-white rounded-lg hover:bg-[#0a3d24]"
+					>
+						Back to Participants
+					</button>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="space-y-6">
 			{/* Header */}
@@ -308,7 +362,7 @@ export default function AddParticipantPage() {
 					</p>
 				</div>
 				<div className="flex items-center space-x-3">
-					{isEditMode && isAdmin && (
+					{isEditMode && accessDelete && (
 						<button
 							onClick={handleDelete}
 							disabled={loading}

@@ -15,7 +15,10 @@ import {
 	Edit,
 	Trash2,
 	Eye,
-	X
+	X,
+	FileText,
+	Image as ImageIcon,
+	FileDown
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAccess } from "@/hooks/useAccess";
@@ -78,7 +81,7 @@ export default function TrainingPage() {
 	const router = useRouter();
 	const { user, getUserId } = useAuth();
 	const userId = user?.id || getUserId();
-	const { isAdmin, loading: accessLoading } = useAccess(userId);
+	const { accessAdd, accessEdit, accessDelete, trainingSection, loading: accessLoading } = useAccess(userId);
 	
 	const [trainingData, setTrainingData] = useState<TrainingEvent[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -197,6 +200,70 @@ export default function TrainingPage() {
 		setViewingRecord(null);
 	};
 
+	const handleDownloadFile = async (filePath: string, fileName: string) => {
+		try {
+			// Construct the full URL
+			const fullPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
+			const url = `${window.location.origin}${fullPath}`;
+			
+			// Fetch the file
+			const response = await fetch(url);
+			if (!response.ok) {
+				throw new Error('File not found');
+			}
+			
+			// Get the blob
+			const blob = await response.blob();
+			
+			// Create a download link
+			const downloadUrl = window.URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = downloadUrl;
+			link.download = fileName || filePath.split('/').pop() || 'download';
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			window.URL.revokeObjectURL(downloadUrl);
+		} catch (error) {
+			console.error('Error downloading file:', error);
+			alert('Failed to download file. Please check if the file exists.');
+		}
+	};
+
+	const handleDownloadPictures = async (picturePath: string) => {
+		try {
+			// Picture path might contain multiple files separated by comma
+			const paths = picturePath.split(',').map(p => p.trim());
+			
+			for (const path of paths) {
+				const fullPath = path.startsWith('/') ? path : `/${path}`;
+				const url = `${window.location.origin}${fullPath}`;
+				
+				const response = await fetch(url);
+				if (!response.ok) {
+					console.warn(`File not found: ${path}`);
+					continue;
+				}
+				
+				const blob = await response.blob();
+				const downloadUrl = window.URL.createObjectURL(blob);
+				const link = document.createElement('a');
+				link.href = downloadUrl;
+				link.download = path.split('/').pop() || 'picture.jpg';
+				document.body.appendChild(link);
+				link.click();
+				document.body.removeChild(link);
+				window.URL.revokeObjectURL(downloadUrl);
+				
+				// Small delay between downloads
+				await new Promise(resolve => setTimeout(resolve, 500));
+			}
+		} catch (error) {
+			console.error('Error downloading pictures:', error);
+			alert('Failed to download pictures. Please check if the files exist.');
+		}
+	};
+
 	// Filter data based on selected filters
 	const filteredData = trainingData.filter(item => {
 		const matchesDistrict = !selectedDistrict || selectedDistrict === "All" || item.District === selectedDistrict;
@@ -214,7 +281,7 @@ export default function TrainingPage() {
 	const totalFemale = filteredData.reduce((sum, item) => sum + (item.TotalFemale || 0), 0);
 	const totalParticipants = filteredData.reduce((sum, item) => sum + (item.TotalParticipants || 0), 0);
 
-	if (loading) {
+	if (accessLoading || loading) {
 		return (
 			<div className="space-y-6">
 				<div>
@@ -224,6 +291,21 @@ export default function TrainingPage() {
 				<div className="flex items-center justify-center py-12">
 					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0b4d2b]"></div>
 					<span className="ml-3 text-gray-600">Loading training data...</span>
+				</div>
+			</div>
+		);
+	}
+
+	if (!trainingSection) {
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-2xl font-bold text-gray-900">Training, Capacity Building & Awareness</h1>
+					<p className="text-gray-600 mt-2">View and manage training events</p>
+				</div>
+				<div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+					<h2 className="text-xl font-semibold text-red-900 mb-2">Access Denied</h2>
+					<p className="text-red-700">You do not have access to the Training Section. Please contact your administrator.</p>
 				</div>
 			</div>
 		);
@@ -258,7 +340,7 @@ export default function TrainingPage() {
 					<p className="text-gray-600 mt-2">View and manage training events</p>
 				</div>
 				<div className="flex items-center space-x-3">
-					{isAdmin && !accessLoading && (
+					{accessAdd && trainingSection && !accessLoading && (
 						<a
 							href="/dashboard/training/add"
 							className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -554,27 +636,31 @@ export default function TrainingPage() {
 												>
 													<Eye className="h-4 w-4" />
 												</button>
-												{isAdmin && !accessLoading && (
+												{trainingSection && !accessLoading && (
 													<>
-														<button
-															onClick={() => handleEdit(item.SN)}
-															className="inline-flex items-center px-3 py-1.5 text-sm text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
-															title="Edit"
-														>
-															<Edit className="h-4 w-4" />
-														</button>
-														<button
-															onClick={() => handleDelete(item.SN)}
-															disabled={deleteLoading === item.SN}
-															className="inline-flex items-center px-3 py-1.5 text-sm text-red-600 bg-red-50 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
-															title="Delete"
-														>
-															{deleteLoading === item.SN ? (
-																<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
-															) : (
-																<Trash2 className="h-4 w-4" />
-															)}
-														</button>
+														{accessEdit && (
+															<button
+																onClick={() => handleEdit(item.SN)}
+																className="inline-flex items-center px-3 py-1.5 text-sm text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
+																title="Edit"
+															>
+																<Edit className="h-4 w-4" />
+															</button>
+														)}
+														{accessDelete && (
+															<button
+																onClick={() => handleDelete(item.SN)}
+																disabled={deleteLoading === item.SN}
+																className="inline-flex items-center px-3 py-1.5 text-sm text-red-600 bg-red-50 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+																title="Delete"
+															>
+																{deleteLoading === item.SN ? (
+																	<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+																) : (
+																	<Trash2 className="h-4 w-4" />
+																)}
+															</button>
+														)}
 													</>
 												)}
 											</div>
@@ -595,20 +681,20 @@ export default function TrainingPage() {
 
 			{/* View Modal */}
 			{viewingRecord && (
-				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-					<div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-						<div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-							<h2 className="text-xl font-bold text-gray-900">Training Event Details</h2>
+				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={closeViewModal}>
+					<div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[95vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+						<div className="sticky top-0 bg-gradient-to-r from-[#0b4d2b] to-[#0a3d24] text-white px-6 py-4 flex items-center justify-between rounded-t-lg">
+							<h2 className="text-2xl font-bold">Training Event Details</h2>
 							<button
 								onClick={closeViewModal}
-								className="text-gray-400 hover:text-gray-600 transition-colors"
+								className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
 							>
 								<X className="h-6 w-6" />
 							</button>
 						</div>
 						<div className="p-6 space-y-6">
 							{/* Basic Information */}
-							<div>
+							<div className="bg-gray-50 rounded-lg p-4">
 								<h3 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h3>
 								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 									<div>
@@ -639,7 +725,7 @@ export default function TrainingPage() {
 							</div>
 
 							{/* Location & Dates */}
-							<div>
+							<div className="bg-gray-50 rounded-lg p-4">
 								<h3 className="text-lg font-semibold text-gray-900 mb-4">Location & Dates</h3>
 								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 									<div>
@@ -670,7 +756,7 @@ export default function TrainingPage() {
 							</div>
 
 							{/* Participants */}
-							<div>
+							<div className="bg-gray-50 rounded-lg p-4">
 								<h3 className="text-lg font-semibold text-gray-900 mb-4">Participants</h3>
 								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 									<div>
@@ -744,7 +830,7 @@ export default function TrainingPage() {
 
 							{/* Event Details */}
 							{(viewingRecord.EventAgendas || viewingRecord.ExpectedOutcomes || viewingRecord.ChallengesFaced || viewingRecord.SuggestedActions) && (
-								<div>
+								<div className="bg-gray-50 rounded-lg p-4">
 									<h3 className="text-lg font-semibold text-gray-900 mb-4">Event Details</h3>
 									<div className="space-y-4">
 										{viewingRecord.EventAgendas && (
@@ -777,7 +863,7 @@ export default function TrainingPage() {
 
 							{/* Evaluations */}
 							{(viewingRecord.PreTrainingEvaluation || viewingRecord.PostTrainingEvaluation) && (
-								<div>
+								<div className="bg-gray-50 rounded-lg p-4">
 									<h3 className="text-lg font-semibold text-gray-900 mb-4">Evaluations</h3>
 									<div className="space-y-4">
 										{viewingRecord.PreTrainingEvaluation && (
@@ -797,28 +883,56 @@ export default function TrainingPage() {
 							)}
 
 							{/* Additional Information */}
-							<div>
+							<div className="bg-gray-50 rounded-lg p-4">
 								<h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
-								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-									{viewingRecord.ActivityCompletionReportLink && (
-										<div>
-											<label className="text-sm font-medium text-gray-500">Activity Completion Report Link</label>
-											<p className="text-sm text-gray-900 mt-1 break-all">{viewingRecord.ActivityCompletionReportLink}</p>
+								<div className="space-y-4">
+									{/* File Downloads Section */}
+									{(viewingRecord.ActivityCompletionReportLink || viewingRecord.ParticipantListAttachment || viewingRecord.PictureAttachment) && (
+										<div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+											<h4 className="text-sm font-semibold text-gray-900 mb-3">Attachments & Downloads</h4>
+											<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+												{viewingRecord.ActivityCompletionReportLink && (
+													<button
+														onClick={() => handleDownloadFile(
+															viewingRecord.ActivityCompletionReportLink!,
+															`Activity_Completion_Report_${viewingRecord.SN || 'report'}.pdf`
+														)}
+														className="flex items-center justify-center space-x-2 px-4 py-3 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors text-sm font-medium text-blue-700"
+													>
+														<FileText className="h-5 w-5" />
+														<span>Download Report</span>
+														<FileDown className="h-4 w-4" />
+													</button>
+												)}
+												{viewingRecord.ParticipantListAttachment && (
+													<button
+														onClick={() => handleDownloadFile(
+															viewingRecord.ParticipantListAttachment!,
+															`Participant_List_${viewingRecord.SN || 'list'}.pdf`
+														)}
+														className="flex items-center justify-center space-x-2 px-4 py-3 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors text-sm font-medium text-blue-700"
+													>
+														<FileText className="h-5 w-5" />
+														<span>Download List</span>
+														<FileDown className="h-4 w-4" />
+													</button>
+												)}
+												{viewingRecord.PictureAttachment && (
+													<button
+														onClick={() => handleDownloadPictures(viewingRecord.PictureAttachment!)}
+														className="flex items-center justify-center space-x-2 px-4 py-3 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors text-sm font-medium text-blue-700"
+													>
+														<ImageIcon className="h-5 w-5" />
+														<span>Download Pictures</span>
+														<FileDown className="h-4 w-4" />
+													</button>
+												)}
+											</div>
 										</div>
 									)}
-									{viewingRecord.ParticipantListAttachment && (
-										<div>
-											<label className="text-sm font-medium text-gray-500">Participant List Attachment</label>
-											<p className="text-sm text-gray-900 mt-1 break-all">{viewingRecord.ParticipantListAttachment}</p>
-										</div>
-									)}
-									{viewingRecord.PictureAttachment && (
-										<div>
-											<label className="text-sm font-medium text-gray-500">Picture Attachment</label>
-											<p className="text-sm text-gray-900 mt-1 break-all">{viewingRecord.PictureAttachment}</p>
-										</div>
-									)}
-									{viewingRecord.DataCompilerName && (
+									
+									<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+										{viewingRecord.DataCompilerName && (
 										<div>
 											<label className="text-sm font-medium text-gray-500">Data Compiler Name</label>
 											<p className="text-sm text-gray-900 mt-1">{viewingRecord.DataCompilerName}</p>
@@ -842,19 +956,20 @@ export default function TrainingPage() {
 											<p className="text-sm text-gray-900 mt-1">{viewingRecord.LastModifiedDate}</p>
 										</div>
 									)}
-								</div>
+									</div>
 								{viewingRecord.Remarks && (
 									<div className="mt-4">
 										<label className="text-sm font-medium text-gray-500">Remarks</label>
 										<p className="text-sm text-gray-900 mt-1 whitespace-pre-wrap">{viewingRecord.Remarks}</p>
 									</div>
 								)}
+								</div>
 							</div>
 						</div>
-						<div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end">
+						<div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end rounded-b-lg">
 							<button
 								onClick={closeViewModal}
-								className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+								className="px-6 py-2 bg-[#0b4d2b] text-white rounded-lg hover:bg-[#0a3d24] transition-colors font-medium"
 							>
 								Close
 							</button>

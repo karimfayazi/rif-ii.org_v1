@@ -46,6 +46,7 @@ export async function PUT(request: NextRequest) {
 				[SubNo] = @SubNo,
 				[SubActivityName] = @SubActivityName,
 				[EventType] = @EventType,
+				[Sector] = @Sector,
 				[Venue] = @Venue,
 				[LocationTehsil] = @LocationTehsil,
 				[District] = @District,
@@ -78,6 +79,7 @@ export async function PUT(request: NextRequest) {
 				[ActivityCompletionReportLink] = @ActivityCompletionReportLink,
 				[ParticipantListAttachment] = @ParticipantListAttachment,
 				[PictureAttachment] = @PictureAttachment,
+				[External_Links] = @External_Links,
 				[Remarks] = @Remarks,
 				[DataCompilerName] = @DataCompilerName,
 				[DataVerifiedBy] = @DataVerifiedBy,
@@ -92,6 +94,7 @@ export async function PUT(request: NextRequest) {
 			.input("SubNo", data.subNo || null)
 			.input("SubActivityName", data.subActivityName || null)
 			.input("EventType", data.eventType || null)
+			.input("Sector", data.sector || null)
 			.input("Venue", data.venue || null)
 			.input("LocationTehsil", data.locationTehsil || null)
 			.input("District", data.district || null)
@@ -124,6 +127,7 @@ export async function PUT(request: NextRequest) {
 			.input("ActivityCompletionReportLink", data.activityCompletionReportLink || null)
 			.input("ParticipantListAttachment", data.participantListAttachment || null)
 			.input("PictureAttachment", data.pictureAttachment || null)
+			.input("External_Links", data.externalLinks || null)
 			.input("Remarks", data.remarks || null)
 			.input("DataCompilerName", data.dataCompilerName || userId)
 			.input("DataVerifiedBy", data.dataVerifiedBy || null)

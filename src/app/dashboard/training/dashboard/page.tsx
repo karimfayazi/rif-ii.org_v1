@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useAccess } from "@/hooks/useAccess";
 
 type OverallStats = {
   totalTrainings: number;
@@ -52,6 +54,10 @@ function getPercentage(part: number, total: number): string {
 }
 
 export default function TrainingCapacityBuildingDashboardPage() {
+  const { user, getUserId } = useAuth();
+  const userId = user?.id || getUserId();
+  const { trainingSection, loading: accessLoading } = useAccess(userId);
+  
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +88,34 @@ export default function TrainingCapacityBuildingDashboardPage() {
 
     fetchData();
   }, []);
+
+  if (accessLoading || loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Training, Capacity Building & Awareness Dashboard</h1>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0b4d2b]"></div>
+          <span className="ml-3 text-gray-600">Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!trainingSection) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Training, Capacity Building & Awareness Dashboard</h1>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <h2 className="text-xl font-semibold text-red-900 mb-2">Access Denied</h2>
+          <p className="text-red-700">You do not have access to the Training Section. Please contact your administrator.</p>
+        </div>
+      </div>
+    );
+  }
 
   const overall = data?.overall;
   const byEventType = data?.byEventType || [];

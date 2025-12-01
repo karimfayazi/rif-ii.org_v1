@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
 		const query = `
 			INSERT INTO [_rifiiorg_db].[rifiiorg].[TrainingEvents] 
-			([TrainingTitle], [Output], [SubNo], [SubActivityName], [EventType], 
+			([TrainingTitle], [Output], [SubNo], [SubActivityName], [EventType], [Sector],
 			 [Venue], [LocationTehsil], [District], [StartDate], [EndDate], [TotalDays], 
 			 [TrainingFacilitatorName], [TMAMale], [TMAFemale], [PHEDMale], [PHEDFemale], 
 			 [LGRDMale], [LGRDFemale], [PDDMale], [PDDFemale], [CommunityMale], [CommunityFemale], 
@@ -40,9 +40,9 @@ export async function POST(request: NextRequest) {
 			 [TotalParticipants], [PreTrainingEvaluation], [PostTrainingEvaluation], 
 			 [EventAgendas], [ExpectedOutcomes], [ChallengesFaced], [SuggestedActions], 
 			 [ActivityCompletionReportLink], [ParticipantListAttachment], [PictureAttachment], 
-			 [Remarks], [DataCompilerName], [DataVerifiedBy], [CreatedDate], [LastModifiedDate])
+			 [External_Links], [Remarks], [DataCompilerName], [DataVerifiedBy], [CreatedDate], [LastModifiedDate])
 			VALUES 
-			(@TrainingTitle, @Output, @SubNo, @SubActivityName, @EventType, 
+			(@TrainingTitle, @Output, @SubNo, @SubActivityName, @EventType, @Sector,
 			 @Venue, @LocationTehsil, @District, @StartDate, @EndDate, @TotalDays, 
 			 @TrainingFacilitatorName, @TMAMale, @TMAFemale, @PHEDMale, @PHEDFemale, 
 			 @LGRDMale, @LGRDFemale, @PDDMale, @PDDFemale, @CommunityMale, @CommunityFemale, 
@@ -50,15 +50,16 @@ export async function POST(request: NextRequest) {
 			 @TotalParticipants, @PreTrainingEvaluation, @PostTrainingEvaluation, 
 			 @EventAgendas, @ExpectedOutcomes, @ChallengesFaced, @SuggestedActions, 
 			 @ActivityCompletionReportLink, @ParticipantListAttachment, @PictureAttachment, 
-			 @Remarks, @DataCompilerName, @DataVerifiedBy, GETDATE(), GETDATE())
+			 @External_Links, @Remarks, @DataCompilerName, @DataVerifiedBy, GETDATE(), GETDATE())
 		`;
 
-		await pool.request()
+		const result = await pool.request()
 			.input("TrainingTitle", data.trainingTitle || null)
 			.input("Output", data.output || null)
 			.input("SubNo", data.subNo || null)
 			.input("SubActivityName", data.subActivityName || null)
 			.input("EventType", data.eventType || null)
+			.input("Sector", data.sector || null)
 			.input("Venue", data.venue || null)
 			.input("LocationTehsil", data.locationTehsil || null)
 			.input("District", data.district || null)
@@ -91,14 +92,29 @@ export async function POST(request: NextRequest) {
 			.input("ActivityCompletionReportLink", data.activityCompletionReportLink || null)
 			.input("ParticipantListAttachment", data.participantListAttachment || null)
 			.input("PictureAttachment", data.pictureAttachment || null)
+			.input("External_Links", data.externalLinks || null)
 			.input("Remarks", data.remarks || null)
 			.input("DataCompilerName", data.dataCompilerName || userId)
 			.input("DataVerifiedBy", data.dataVerifiedBy || null)
 			.query(query);
 
+		// Get the inserted SN
+		const getSNQuery = `
+			SELECT TOP 1 [SN] 
+			FROM [_rifiiorg_db].[rifiiorg].[TrainingEvents] 
+			WHERE [DataCompilerName] = @DataCompilerName 
+			ORDER BY [SN] DESC
+		`;
+		const snResult = await pool.request()
+			.input("DataCompilerName", data.dataCompilerName || userId)
+			.query(getSNQuery);
+
+		const insertedSN = snResult.recordset?.[0]?.SN || null;
+
 		return NextResponse.json({
 			success: true,
-			message: "Training event added successfully"
+			message: "Training event added successfully",
+			sn: insertedSN
 		});
 
 	} catch (error) {

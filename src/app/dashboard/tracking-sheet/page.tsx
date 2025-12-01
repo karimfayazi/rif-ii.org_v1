@@ -53,7 +53,7 @@ type TrackingData = {
 export default function TrackingSheetPage() {
 	const { user, getUserId } = useAuth();
 	const userId = user?.id || getUserId();
-	const { isAdmin, loading: accessLoading } = useAccess(userId);
+	const { isAdmin, trackingSection, loading: accessLoading } = useAccess(userId);
 	
 	const [trackingData, setTrackingData] = useState<TrackingData[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -242,7 +242,7 @@ export default function TrackingSheetPage() {
 		return index === self.findIndex((t) => t.Sub_Sub_ActivityID?.toString() === currentId);
 	});
 
-	if (loading) {
+	if (accessLoading || loading) {
 		return (
 			<div className="space-y-6">
 				<div>
@@ -252,6 +252,21 @@ export default function TrackingSheetPage() {
 				<div className="flex items-center justify-center py-12">
 					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0b4d2b]"></div>
 					<span className="ml-3 text-gray-600">Loading tracking data...</span>
+				</div>
+			</div>
+		);
+	}
+
+	if (!trackingSection) {
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-2xl font-bold text-gray-900">Tracking Sheet</h1>
+					<p className="text-gray-600 mt-2">Monitor project activities and progress</p>
+				</div>
+				<div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+					<h2 className="text-xl font-semibold text-red-900 mb-2">Access Denied</h2>
+					<p className="text-red-700">You do not have access to the Tracking Section. Please contact your administrator.</p>
 				</div>
 			</div>
 		);
