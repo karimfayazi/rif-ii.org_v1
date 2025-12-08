@@ -45,3 +45,6 @@ node_modules.zip
 public/maps/Shapefiles/hotosm_pak_roads_lines_shp.*
 public/maps/Shapefiles/hotosm_pak_waterways_lines_shp.*
 public/maps/Shapefiles/hotosm_pak_waterways_lines_shpCopy.*
+
+# KMZ files (too large for GitHub)
+public/maps/kmz/**/*.kmz

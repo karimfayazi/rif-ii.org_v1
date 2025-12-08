@@ -2,16 +2,22 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Calendar, Folder, Image as ImageIcon, ExternalLink, TrendingUp, MapPin, Building2, Newspaper, Clock, Layers, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Folder, Image as ImageIcon, ExternalLink, TrendingUp, MapPin, Building2, Newspaper, Clock, Layers, Info, Loader2, ChevronDown, ChevronUp, Shield, AlertTriangle, User, X } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 type PictureData = {
-	GroupName: string;
-	MainCategory: string;
-	SubCategory: string;
-	FileName: string;
-	FilePath: string;
-	EventDate: string;
+	PictureID?: number;
+	GroupName: string | null;
+	MainCategory: string | null;
+	SubCategory: string | null;
+	FileName: string | null;
+	FilePath: string | null;
+	FileSizeKB: number | null;
+	UploadedBy: string | null;
+	UploadDate: string | null;
+	IsActive: boolean | null;
+	EventDate: string | null;
 };
 
 // GIS Map Component with Boundaries using Leaflet (OpenStreetMap)
@@ -46,18 +52,37 @@ function GISMapWithBoundaries() {
 						return;
 					}
 
-					// Clear any existing map
+					const container = mapContainerRef.current;
+
+					// Check if container already has a Leaflet map instance
+					if ((container as any)._leaflet_id) {
+						// Container already has a map, try to get it and remove it
+						try {
+							const existingMap = (container as any)._leaflet;
+							if (existingMap && typeof existingMap.remove === 'function') {
+								existingMap.remove();
+							}
+							// Clear the leaflet ID
+							delete (container as any)._leaflet_id;
+							delete (container as any)._leaflet;
+						} catch (e) {
+							console.warn('Error cleaning existing map:', e);
+						}
+					}
+
+					// Clear any existing map reference
 					if (mapInstanceRef.current) {
 						try {
-							mapInstanceRef.current.remove();
+							if (typeof mapInstanceRef.current.remove === 'function') {
+								mapInstanceRef.current.remove();
+							}
 						} catch (e) {
-							console.warn('Error removing existing map:', e);
+							console.warn('Error removing existing map instance:', e);
 						}
 						mapInstanceRef.current = null;
 					}
 
 					// Ensure container has proper dimensions
-					const container = mapContainerRef.current;
 					if (container.offsetWidth === 0 || container.offsetHeight === 0) {
 						setTimeout(initializeMap, 200);
 						return;
@@ -1121,6 +1146,24 @@ type ActivityProgress = {
 	OutputWeightage: number;
 };
 
+type SectorProgress = {
+	ActivityProgress: number;
+	Sector_Name: string;
+};
+
+type DistrictProgressSummary = {
+	District: string;
+	AvgActivityProgress: number;
+};
+
+type TrainingGraphData = {
+	EventType: string;
+	District: string;
+	TotalMale: number;
+	TotalFemale: number;
+	TotalParticipants: number;
+};
+
 type OverallStats = {
 	totalTrainings: number;
 	totalDays: number;
@@ -1165,16 +1208,22 @@ export default function DashboardPage() {
 	const [districtProgress, setDistrictProgress] = useState<DistrictProgress[]>([]);
 	const [outputWeightage, setOutputWeightage] = useState<OutputWeightage[]>([]);
 	const [activityProgress, setActivityProgress] = useState<ActivityProgress[]>([]);
+	const [sectorProgress, setSectorProgress] = useState<SectorProgress[]>([]);
+	const [districtProgressSummary, setDistrictProgressSummary] = useState<DistrictProgressSummary[]>([]);
 	const [trainingDashboardData, setTrainingDashboardData] = useState<DashboardData | null>(null);
+	const [trainingGraphData, setTrainingGraphData] = useState<TrainingGraphData[]>([]);
 	const [selectedEventType, setSelectedEventType] = useState<BreakdownRow | null>(null);
 	const [selectedDistrict, setSelectedDistrict] = useState<BreakdownRow | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [currentIndex, setCurrentIndex] = useState(0);
-	const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+	const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+	const [selectedPicture, setSelectedPicture] = useState<PictureData | null>(null);
 	const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 	const [newsIndex, setNewsIndex] = useState(0);
 	const [isNewsAutoPlaying, setIsNewsAutoPlaying] = useState(true);
+	const [securityAlerts, setSecurityAlerts] = useState<Array<{id: number; incident_title: string; ReferenceNumber?: string}>>([]);
+	const [securityAlertsLoading, setSecurityAlertsLoading] = useState(false);
 
 	useEffect(() => {
 		fetchDashboardPictures();
@@ -1182,15 +1231,16 @@ export default function DashboardPage() {
 		fetchDistrictProgress();
 		fetchOutputWeightage();
 		fetchActivityProgress();
+		fetchSectorProgress();
+		fetchDistrictProgressSummary();
 		fetchTrainingDashboard();
+		fetchTrainingGraphs();
+		fetchSecurityAlerts();
 	}, []);
 
 	const fetchTrainingDashboard = async () => {
 		try {
 			const res = await fetch("/api/training/dashboard");
-			if (!res.ok) {
-				throw new Error("Failed to load dashboard data");
-			}
 			const json = await res.json() as DashboardResponse;
 			if (!json.success) {
 				throw new Error(json.message ?? "Failed to load dashboard data");
@@ -1198,6 +1248,28 @@ export default function DashboardPage() {
 			setTrainingDashboardData(json);
 		} catch (err) {
 			console.error("Error fetching training dashboard:", err);
+		}
+	};
+
+	const fetchSecurityAlerts = async () => {
+		try {
+			setSecurityAlertsLoading(true);
+			const response = await fetch('/api/security-updates');
+			const data = await response.json();
+			
+			if (data.success && data.incidents) {
+				// Get only id, incident_title, and ReferenceNumber
+				const alerts = data.incidents.map((incident: any) => ({
+					id: incident.id,
+					incident_title: incident.incident_title,
+					ReferenceNumber: incident.ReferenceNumber || incident['Reference #']
+				}));
+				setSecurityAlerts(alerts.slice(0, 5)); // Show latest 5 alerts
+			}
+		} catch (err) {
+			console.error("Error fetching security alerts:", err);
+		} finally {
+			setSecurityAlertsLoading(false);
 		}
 	};
 
@@ -1214,14 +1286,14 @@ export default function DashboardPage() {
 	}
 
 	useEffect(() => {
-		if (isAutoPlaying && pictures.length > 0) {
+		if (isAutoPlaying && pictures.length > 3) {
 			const interval = setInterval(() => {
 				setCurrentIndex((prevIndex) => {
-					// Show 4 images at a time, so max index should be pictures.length - 4
-					const maxIndex = Math.max(0, pictures.length - 4);
+					// Show 3 images at a time, so max index should be pictures.length - 3
+					const maxIndex = Math.max(0, pictures.length - 3);
 					return prevIndex >= maxIndex ? 0 : prevIndex + 1;
 				});
-			}, 3000); // Change picture every 3 seconds
+			}, 10000); // Change picture every 10 seconds
 
 			return () => clearInterval(interval);
 		}
@@ -1284,42 +1356,24 @@ export default function DashboardPage() {
 	}, [isNewsAutoPlaying, newsItems.length]);
 
 	const getImageUrl = (filePath: string | null) => {
-		if (!filePath) {
-			console.warn('getImageUrl: filePath is null or empty');
-			return '';
-		}
-		
-		// If already a full URL, return as is
+		if (!filePath) return '';
 		if (filePath.startsWith('https://') || filePath.startsWith('http://')) {
 			return filePath;
+		} else if (filePath.startsWith('~/')) {
+			// Remove the ~/ prefix
+			return `https://rif-ii.org/${filePath.replace('~/', '')}`;
+		} else if (filePath.startsWith('uploads/')) {
+			return `/${filePath}`;
+		} else {
+			return `https://rif-ii.org/${filePath}`;
 		}
-		
-		// Remove ~/ prefix if present
-		let cleanPath = filePath.startsWith('~/') ? filePath.replace('~/', '') : filePath;
-		
-		// Ensure it starts with Uploads (capital U as per the server structure)
-		if (!cleanPath.startsWith('Uploads/') && !cleanPath.startsWith('uploads/')) {
-			cleanPath = `Uploads/${cleanPath}`;
-		} else if (cleanPath.startsWith('uploads/')) {
-			// Convert lowercase uploads to Uploads
-			cleanPath = 'Uploads/' + cleanPath.substring('uploads/'.length);
-		}
-		
-		// Construct full URL
-		const fullUrl = `https://rif-ii.org/${cleanPath}`;
-		
-		// Debug logging (only in development)
-		if (process.env.NODE_ENV === 'development') {
-			console.log('getImageUrl:', { original: filePath, cleaned: cleanPath, final: fullUrl });
-		}
-		
-		return fullUrl;
 	};
 
 	const fetchDashboardPictures = async () => {
 		try {
 			setLoading(true);
-			const response = await fetch('/api/pictures/dashboard');
+			// Fetch all pictures for the gallery
+			const response = await fetch('/api/pictures/details');
 			const data = await response.json();
 
 			if (data.success) {
@@ -1396,27 +1450,67 @@ export default function DashboardPage() {
 		}
 	};
 
+	const fetchSectorProgress = async () => {
+		try {
+			const response = await fetch('/api/tracking-sheet/sector-progress');
+			const data = await response.json();
+
+			if (data.success) {
+				setSectorProgress(data.sectorProgress || []);
+			} else {
+				console.error("Failed to fetch sector progress:", data.message);
+			}
+		} catch (err) {
+			console.error("Error fetching sector progress:", err);
+		}
+	};
+
+	const fetchDistrictProgressSummary = async () => {
+		try {
+			const response = await fetch('/api/tracking-sheet/district-progress-summary');
+			const data = await response.json();
+
+			if (data.success) {
+				setDistrictProgressSummary(data.districtProgress || []);
+			} else {
+				console.error("Failed to fetch district progress summary:", data.message);
+			}
+		} catch (err) {
+			console.error("Error fetching district progress summary:", err);
+		}
+	};
+
+	const fetchTrainingGraphs = async () => {
+		try {
+			const response = await fetch('/api/training/graphs');
+			const data = await response.json();
+
+			if (data.success) {
+				setTrainingGraphData(data.graphData || []);
+			} else {
+				console.error("Failed to fetch training graphs:", data.message);
+			}
+		} catch (err) {
+			console.error("Error fetching training graphs:", err);
+		}
+	};
+
 	const handlePictureClick = (picture: PictureData) => {
-		const params = new URLSearchParams();
-		if (picture.GroupName) params.append('groupName', picture.GroupName);
-		if (picture.MainCategory) params.append('mainCategory', picture.MainCategory);
-		if (picture.SubCategory) params.append('subCategory', picture.SubCategory);
-		
-		router.push(`/dashboard/pictures/details?${params.toString()}`);
+		setSelectedPicture(picture);
 	};
 
 	const nextPicture = () => {
 		setCurrentIndex((prevIndex) => {
-			// Show 4 images at a time, so max index should be pictures.length - 4
-			const maxIndex = Math.max(0, pictures.length - 4);
+			// Show 3 images at a time, so max index should be pictures.length - 3
+			const maxIndex = Math.max(0, pictures.length - 3);
 			return prevIndex >= maxIndex ? 0 : prevIndex + 1;
 		});
 	};
 
 	const prevPicture = () => {
 		setCurrentIndex((prevIndex) => {
-			// Show 4 images at a time, so max index should be pictures.length - 4
-			const maxIndex = Math.max(0, pictures.length - 4);
+			// Show 3 images at a time, so max index should be pictures.length - 3
+			const maxIndex = Math.max(0, pictures.length - 3);
 			return prevIndex <= 0 ? maxIndex : prevIndex - 1;
 		});
 	};
@@ -1481,13 +1575,16 @@ export default function DashboardPage() {
 				<p className="text-gray-600 mt-2">Welcome to the RIF-II MIS Dashboard</p>
 			</div>
 
-			{/* Progress % Section */}
-			<div className="space-y-6">
-				<div>
-					<h2 className="text-3xl font-bold text-gray-900 tracking-tight">Project Tracking Progress (%)</h2>
-					<p className="text-sm text-gray-500 mt-1">Monitor and track project completion across all outputs</p>
-				</div>
-				<div className="bg-white rounded-xl border border-gray-200 shadow-lg p-6">
+		{/* Progress % Section - Three Columns */}
+		<div className="space-y-6">
+			<div className="flex items-center gap-3">
+				<h2 className="text-xl font-bold text-gray-900 tracking-tight">Project Tracking Progress (%)</h2>
+				<p className="text-sm text-gray-500">Monitor and track project completion across all outputs</p>
+			</div>
+			<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+				{/* First Chart - Output Progress */}
+				<div className="bg-white rounded-xl border border-gray-200 shadow-lg p-4">
+					<h3 className="text-sm font-semibold text-gray-900 mb-4 text-center">Output Progress</h3>
 						{(() => {
 						// Group activities by OutputID
 						const outputAGroup = activityProgress.filter(item => {
@@ -1507,7 +1604,7 @@ export default function DashboardPage() {
 						const outputASum = Math.round(outputAGroup.reduce((sum, item) => sum + (item.OutputWeightage || 0), 0));
 						const outputBSum = Math.round(outputBGroup.reduce((sum, item) => sum + (item.OutputWeightage || 0), 0));
 						const outputCSum = Math.round(outputCGroup.reduce((sum, item) => sum + (item.OutputWeightage || 0), 0));
-						
+
 						// Get Output Weightage values (from Output Weightage section)
 						let outputAWeightage = 0;
 						let outputBWeightage = 0;
@@ -1556,123 +1653,175 @@ export default function DashboardPage() {
 
 						const totalWeightage = outputAWeightage + outputBWeightage + outputCWeightage;
 
-							return (
-							<div className="w-full">
-								{/* Combined Bar Chart */}
-								<div className="flex items-end justify-center gap-8 mb-6" style={{ minHeight: '300px' }}>
+						return (
+						<div className="w-full">
+							{/* Combined Bar Chart */}
+								<div className="flex items-end justify-center gap-3 mb-4" style={{ minHeight: '200px' }}>
 									{/* Output A Bar */}
 									<div className="flex flex-col items-center">
-										<div className="w-20 bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '240px' }}>
+										<div className="w-12 bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '180px' }}>
 											<div 
-												className="bg-gradient-to-t from-blue-500 to-blue-600 w-20 rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-2 absolute bottom-0"
+												className="bg-gradient-to-t from-blue-500 to-blue-600 w-12 rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-1 absolute bottom-0"
 												style={{ height: `${Math.min(outputASum, 100)}%` }}
 											>
-												<span className="text-white text-xs font-bold">{outputASum}%</span>
-												</div>
-																</div>
-										<p className="text-sm font-semibold text-blue-700 mt-2">Output A</p>
-										<p className="text-xs text-gray-500">Weightage: {outputAWeightage}</p>
-										<p className="text-lg font-bold text-blue-600 mt-1">{outputASum}%</p>
-															</div>
+												<span className="text-white text-[10px] font-bold">{outputASum}%</span>
+										</div>
+									</div>
+										<p className="text-xs font-semibold text-blue-700 mt-1">Output A</p>
+										<p className="text-[10px] text-gray-500">W: {outputAWeightage}</p>
+													</div>
 
 									{/* Output B Bar */}
 									<div className="flex flex-col items-center">
-										<div className="w-20 bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '240px' }}>
+										<div className="w-12 bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '180px' }}>
 											<div 
-												className="bg-gradient-to-t from-green-500 to-green-600 w-20 rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-2 absolute bottom-0"
+												className="bg-gradient-to-t from-green-500 to-green-600 w-12 rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-1 absolute bottom-0"
 												style={{ height: `${Math.min(outputBSum, 100)}%` }}
 											>
-												<span className="text-white text-xs font-bold">{outputBSum}%</span>
-														</div>
-													</div>
-										<p className="text-sm font-semibold text-green-700 mt-2">Output B</p>
-										<p className="text-xs text-gray-500">Weightage: {outputBWeightage}</p>
-										<p className="text-lg font-bold text-green-600 mt-1">{outputBSum}%</p>
-																</div>
+												<span className="text-white text-[10px] font-bold">{outputBSum}%</span>
+												</div>
+											</div>
+										<p className="text-xs font-semibold text-green-700 mt-1">Output B</p>
+										<p className="text-[10px] text-gray-500">W: {outputBWeightage}</p>
+									</div>
 
 									{/* Output C Bar */}
 									<div className="flex flex-col items-center">
-										<div className="w-20 bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '240px' }}>
+										<div className="w-12 bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '180px' }}>
 																	<div
-												className="bg-gradient-to-t from-purple-500 to-purple-600 w-20 rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-2 absolute bottom-0"
+												className="bg-gradient-to-t from-purple-500 to-purple-600 w-12 rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-1 absolute bottom-0"
 												style={{ height: `${Math.min(outputCSum, 100)}%` }}
 											>
-												<span className="text-white text-xs font-bold">{outputCSum}%</span>
-																</div>
+												<span className="text-white text-[10px] font-bold">{outputCSum}%</span>
+					</div>
 															</div>
-										<p className="text-sm font-semibold text-purple-700 mt-2">Output C</p>
-										<p className="text-xs text-gray-500">Weightage: {outputCWeightage}</p>
-										<p className="text-lg font-bold text-purple-600 mt-1">{outputCSum}%</p>
-												</div>
+										<p className="text-xs font-semibold text-purple-700 mt-1">Output C</p>
+										<p className="text-[10px] text-gray-500">W: {outputCWeightage}</p>
+				</div>
 
 									{/* Total Progress Bar */}
 									<div className="flex flex-col items-center">
-										<div className="w-20 bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2 border-2 border-orange-400" style={{ height: '240px' }}>
+										<div className="w-12 bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2 border-2 border-orange-400" style={{ height: '180px' }}>
 											<div 
-												className="bg-gradient-to-t from-orange-500 to-orange-600 w-20 rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-2 absolute bottom-0"
+												className="bg-gradient-to-t from-orange-500 to-orange-600 w-12 rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-1 absolute bottom-0"
 												style={{ height: `${Math.min(totalProgress, 100)}%` }}
 											>
-												<span className="text-white text-xs font-bold">{totalProgress.toFixed(1)}%</span>
-											</div>
-										</div>
-										<p className="text-sm font-semibold text-orange-700 mt-2">Total Progress</p>
-										<p className="text-xs text-gray-500">Total Weightage: {totalWeightage}</p>
-										<p className="text-lg font-bold text-orange-600 mt-1">{totalProgress.toFixed(1)}%</p>
-					</div>
-				</div>
-
-								{/* X-axis labels */}
-								<div className="flex justify-center gap-8 mt-4">
-									<div className="w-20 text-center">
-										<div className="h-3 w-3 bg-blue-500 rounded-full mx-auto mb-1"></div>
-										<p className="text-xs text-gray-600">Output A</p>
+												<span className="text-white text-[10px] font-bold">{totalProgress.toFixed(1)}%</span>
 							</div>
-									<div className="w-20 text-center">
-										<div className="h-3 w-3 bg-green-500 rounded-full mx-auto mb-1"></div>
-										<p className="text-xs text-gray-600">Output B</p>
 							</div>
-									<div className="w-20 text-center">
-										<div className="h-3 w-3 bg-purple-500 rounded-full mx-auto mb-1"></div>
-										<p className="text-xs text-gray-600">Output C</p>
+										<p className="text-xs font-semibold text-orange-700 mt-1">Total</p>
+										<p className="text-[10px] text-gray-500">W: {totalWeightage}</p>
 						</div>
-									<div className="w-20 text-center">
-										<div className="h-3 w-3 bg-orange-500 rounded-full mx-auto mb-1"></div>
-										<p className="text-xs text-gray-600">Total</p>
 					</div>
-												</div>
 																</div>
 						);
 						})()}
+					</div>
+
+					{/* Second Chart - Sector Wise */}
+					<div className="bg-white rounded-xl border border-gray-200 shadow-lg p-4">
+						<h3 className="text-sm font-semibold text-gray-900 mb-4 text-center">Sector Wise</h3>
+						{(() => {
+						// Group by Sector_Name and calculate average ActivityProgress
+						const sectorGroups: { [key: string]: number[] } = {};
+						
+						sectorProgress.forEach(item => {
+							const sector = item.Sector_Name || 'Unknown';
+							const progress = item.ActivityProgress || 0;
+							
+							if (!sectorGroups[sector]) {
+								sectorGroups[sector] = [];
+							}
+							sectorGroups[sector].push(progress);
+							});
+
+						// Calculate averages per sector
+						const sectorData: Array<{ sector: string; avgProgress: number }> = [];
+						Object.keys(sectorGroups).forEach(sector => {
+							const values = sectorGroups[sector];
+							const avgProgress = values.reduce((sum, val) => sum + val, 0) / values.length;
+							sectorData.push({ sector, avgProgress });
+						});
+
+						const maxValue = Math.max(...sectorData.map(d => d.avgProgress), 100);
+
+							return (
+							<div className="w-full">
+								<div className="flex items-end justify-center gap-3 mb-4" style={{ minHeight: '200px' }}>
+									{sectorData.map((item, idx) => {
+										const height = (item.avgProgress / maxValue) * 100;
+										return (
+											<div key={idx} className="flex flex-col items-center">
+												<div className="w-12 bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '180px' }}>
+													<div
+														className="bg-gradient-to-t from-teal-500 to-teal-600 w-12 rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-1 absolute bottom-0"
+														style={{ height: `${Math.min(height, 100)}%` }}
+													>
+														<span className="text-white text-[10px] font-bold">{Math.round(item.avgProgress)}%</span>
+												</div>
+																</div>
+												<p className="text-xs font-semibold text-teal-700 mt-1 text-center max-w-[60px] truncate">{item.sector}</p>
+															</div>
+										);
+									})}
+														</div>
+													</div>
+						);
+					})()}
+																</div>
+
+					{/* Third Chart - District Wise */}
+					<div className="bg-white rounded-xl border border-gray-200 shadow-lg p-4">
+						<h3 className="text-sm font-semibold text-gray-900 mb-4 text-center">District Wise</h3>
+					{(() => {
+						const maxValue = Math.max(...districtProgressSummary.map(d => d.AvgActivityProgress || 0), 100);
+						
+						return (
+							<div className="w-full">
+								<div className="flex items-end justify-center gap-3 mb-4" style={{ minHeight: '200px' }}>
+									{districtProgressSummary.map((item, idx) => {
+										const value = item.AvgActivityProgress || 0;
+										const height = (value / maxValue) * 100;
+										return (
+											<div key={idx} className="flex flex-col items-center">
+												<div className="w-12 bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '180px' }}>
+																	<div
+														className="bg-gradient-to-t from-indigo-500 to-indigo-600 w-12 rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-1 absolute bottom-0"
+														style={{ height: `${Math.min(height, 100)}%` }}
+													>
+														<span className="text-white text-[10px] font-bold">{Math.round(value)}%</span>
 																</div>
 															</div>
+												<p className="text-xs font-semibold text-indigo-700 mt-1 text-center max-w-[60px] truncate">{item.District || 'Unknown'}</p>
+										</div>
+									);
+									})}
+								</div>
+								</div>
+							);
+						})()}
+					</div>
+				</div>
+			</div>
 
 			{/* Training Dashboard Summary Cards */}
 			{trainingDashboardData && (
 				<div className="space-y-6">
-															<div>
-						<h2 className="text-3xl font-bold text-gray-900 tracking-tight">Training, Capacity Building & Awareness</h2>
-						<p className="text-sm text-gray-500 mt-1">Overview of trainings, days and participants (event type wise and district wise).</p>
-																</div>
+					<div className="flex items-center gap-3">
+					<h2 className="text-xl font-bold text-gray-900 tracking-tight">Training, Capacity Building & Awareness</h2>
+					<p className="text-sm text-gray-500">Overview of trainings, days and participants (event type wise and district wise).</p>
+				</div>
 
 					{/* Overall cards */}
-					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 						<div className="rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-4 text-white shadow-md">
 							<p className="text-xs uppercase tracking-wide opacity-80">
 								Total Trainings
 							</p>
-							<p className="mt-2 text-2xl font-semibold">
-								{trainingDashboardData.overall.totalTrainings.toLocaleString()}
-							</p>
-																</div>
-
-						<div className="rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 p-4 text-white shadow-md">
-							<p className="text-xs uppercase tracking-wide opacity-80">
-								Total Days
-							</p>
-							<p className="mt-2 text-2xl font-semibold">
-								{trainingDashboardData.overall.totalDays.toLocaleString()}
-							</p>
-															</div>
+						<p className="mt-2 text-2xl font-semibold">
+							{trainingDashboardData.overall.totalTrainings.toLocaleString()}
+						</p>
+					</div>
 
 						<div className="rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 p-4 text-white shadow-md">
 							<p className="text-xs uppercase tracking-wide opacity-80">
@@ -1696,181 +1845,347 @@ export default function DashboardPage() {
 									)}{" "}
 									Female
 								</p>
-														</div>
-													</div>
-
-						<div className="rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 p-4 text-white shadow-md">
-							<p className="text-xs uppercase tracking-wide opacity-80">
-								Total Participants
-							</p>
-							<p className="mt-2 text-2xl font-semibold">
-								{trainingDashboardData.overall.totalParticipants.toLocaleString()}
-							</p>
-																	</div>
-																</div>
-															</div>
-			)}
-
-			{/* GIS Maps */}
-			<div className="bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden">
-				<div className="p-6 border-b border-gray-200">
-					<div className="flex items-center justify-between">
-						<div>
-							<h2 className="text-xl font-semibold text-gray-900">GIS Maps</h2>
-							<p className="text-sm text-gray-600 mt-1">Interactive GIS maps for Khyber Pakhtunkhwa Districts</p>
-						</div>
-						<Link 
-							href="/dashboard/kml-gis-maps"
-							className="inline-flex items-center px-4 py-2 text-sm font-medium text-[#0b4d2b] bg-[#0b4d2b]/10 rounded-lg hover:bg-[#0b4d2b]/20 transition-colors"
-						>
-							<ExternalLink className="h-4 w-4 mr-2" />
-							View Full Maps
-						</Link>
-					</div>
-				</div>
-				<div className="p-6">
-					<KMLGISMapViewer />
 				</div>
 			</div>
 
-			{/* Project Activities Carousel Section */}
-			<div className="bg-gradient-to-r from-white to-gray-50 rounded-xl border border-gray-200 shadow-lg overflow-hidden">
-				<div className="p-6 border-b border-gray-200">
+			<div className="rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 p-4 text-white shadow-md">
+						<p className="text-xs uppercase tracking-wide opacity-80">
+							Total Participants
+						</p>
+						<p className="mt-2 text-2xl font-semibold">
+							{trainingDashboardData.overall.totalParticipants.toLocaleString()}
+						</p>
+					</div>
+				</div>
+
+				{/* Three Graphs Section */}
+				{trainingGraphData.length > 0 && (
+				<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+						{/* Total Male Graph */}
+						<div className="bg-white rounded-xl border border-gray-200 shadow-lg p-6">
+							<h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">Total Male by Event Type & District</h3>
+						{(() => {
+								// Group by EventType and District
+								const groupedData: { [key: string]: number } = {};
+								trainingGraphData.forEach(item => {
+									const key = `${item.EventType || 'Unknown'} - ${item.District || 'Unknown'}`;
+									groupedData[key] = (groupedData[key] || 0) + (item.TotalMale || 0);
+								});
+
+								const chartData = Object.entries(groupedData)
+									.map(([label, value]) => ({ label, value }))
+									.sort((a, b) => b.value - a.value)
+									.slice(0, 10); // Top 10
+
+								const maxValue = Math.max(...chartData.map(d => d.value), 1);
+
+							return (
+									<div className="w-full">
+										<div className="flex items-end justify-center gap-2 mb-4" style={{ minHeight: '250px' }}>
+											{chartData.map((item, idx) => {
+												const height = (item.value / maxValue) * 100;
+										return (
+													<div key={idx} className="flex flex-col items-center flex-1">
+														<div className="w-full bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '200px' }}>
+															<div
+																className="bg-gradient-to-t from-blue-500 to-blue-600 w-full rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-1 absolute bottom-0"
+																style={{ height: `${Math.min(height, 100)}%` }}
+															>
+																<span className="text-white text-[9px] font-bold">{item.value}</span>
+												</div>
+																</div>
+														<p className="text-[9px] font-semibold text-gray-700 mt-1 text-center max-w-[60px] truncate" title={item.label}>
+															{item.label.split(' - ')[0]}
+														</p>
+														<p className="text-[8px] text-gray-500 text-center max-w-[60px] truncate" title={item.label.split(' - ')[1]}>
+															{item.label.split(' - ')[1]}
+														</p>
+																</div>
+												);
+											})}
+															</div>
+																</div>
+								);
+							})()}
+													</div>
+
+						{/* Total Female Graph */}
+						<div className="bg-white rounded-xl border border-gray-200 shadow-lg p-6">
+							<h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">Total Female by Event Type & District</h3>
+							{(() => {
+								// Group by EventType and District
+								const groupedData: { [key: string]: number } = {};
+								trainingGraphData.forEach(item => {
+									const key = `${item.EventType || 'Unknown'} - ${item.District || 'Unknown'}`;
+									groupedData[key] = (groupedData[key] || 0) + (item.TotalFemale || 0);
+								});
+
+								const chartData = Object.entries(groupedData)
+									.map(([label, value]) => ({ label, value }))
+									.sort((a, b) => b.value - a.value)
+									.slice(0, 10); // Top 10
+
+								const maxValue = Math.max(...chartData.map(d => d.value), 1);
+
+								return (
+									<div className="w-full">
+										<div className="flex items-end justify-center gap-2 mb-4" style={{ minHeight: '250px' }}>
+											{chartData.map((item, idx) => {
+												const height = (item.value / maxValue) * 100;
+												return (
+													<div key={idx} className="flex flex-col items-center flex-1">
+														<div className="w-full bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '200px' }}>
+															<div
+																className="bg-gradient-to-t from-pink-500 to-pink-600 w-full rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-1 absolute bottom-0"
+																style={{ height: `${Math.min(height, 100)}%` }}
+															>
+																<span className="text-white text-[9px] font-bold">{item.value}</span>
+																	</div>
+																</div>
+														<p className="text-[9px] font-semibold text-gray-700 mt-1 text-center max-w-[60px] truncate" title={item.label}>
+															{item.label.split(' - ')[0]}
+														</p>
+														<p className="text-[8px] text-gray-500 text-center max-w-[60px] truncate" title={item.label.split(' - ')[1]}>
+															{item.label.split(' - ')[1]}
+														</p>
+															</div>
+												);
+											})}
+														</div>
+																	</div>
+								);
+							})()}
+																</div>
+
+						{/* Total Participants Graph */}
+						<div className="bg-white rounded-xl border border-gray-200 shadow-lg p-6">
+							<h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">Total Participants by Event Type & District</h3>
+							{(() => {
+								// Group by EventType and District
+								const groupedData: { [key: string]: number } = {};
+								trainingGraphData.forEach(item => {
+									const key = `${item.EventType || 'Unknown'} - ${item.District || 'Unknown'}`;
+									groupedData[key] = (groupedData[key] || 0) + (item.TotalParticipants || 0);
+								});
+
+								const chartData = Object.entries(groupedData)
+									.map(([label, value]) => ({ label, value }))
+									.sort((a, b) => b.value - a.value)
+									.slice(0, 10); // Top 10
+
+								const maxValue = Math.max(...chartData.map(d => d.value), 1);
+
+								return (
+									<div className="w-full">
+										<div className="flex items-end justify-center gap-2 mb-4" style={{ minHeight: '250px' }}>
+											{chartData.map((item, idx) => {
+												const height = (item.value / maxValue) * 100;
+												return (
+													<div key={idx} className="flex flex-col items-center flex-1">
+														<div className="w-full bg-gray-200 rounded-t-lg relative overflow-hidden shadow-inner mb-2" style={{ height: '200px' }}>
+															<div
+																className="bg-gradient-to-t from-green-500 to-green-600 w-full rounded-t-lg transition-all duration-1000 ease-out flex items-start justify-center pt-1 absolute bottom-0"
+																style={{ height: `${Math.min(height, 100)}%` }}
+															>
+																<span className="text-white text-[9px] font-bold">{item.value}</span>
+															</div>
+														</div>
+														<p className="text-[9px] font-semibold text-gray-700 mt-1 text-center max-w-[60px] truncate" title={item.label}>
+															{item.label.split(' - ')[0]}
+														</p>
+														<p className="text-[8px] text-gray-500 text-center max-w-[60px] truncate" title={item.label.split(' - ')[1]}>
+															{item.label.split(' - ')[1]}
+														</p>
+										</div>
+									);
+									})}
+										</div>
+								</div>
+							);
+						})()}
+					</div>
+				</div>
+			)}
+		</div>
+	)}
+
+			{/* Picture Gallery Section */}
+			<div className="bg-gradient-to-r from-[#0b4d2b] to-[#0a3d24] rounded-xl shadow-lg overflow-hidden">
+				<div className="p-6">
 					<div className="flex items-center justify-between">
 						<div>
-							<h2 className="text-xl font-semibold text-gray-900">Project Activities</h2>
-							<p className="text-sm text-gray-600 mt-1">Click on any picture to view more details</p>
+							<h2 className="text-2xl font-bold text-white mb-1">Project Activity Picture Gallery</h2>
+							<p className="text-green-100 text-sm">
+								Displaying {pictures.length} picture{pictures.length !== 1 ? 's' : ''} from your collection
+							</p>
 						</div>
 						<div className="flex items-center space-x-2">
 							<button
 								onClick={() => setIsAutoPlaying(!isAutoPlaying)}
 								className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
 									isAutoPlaying 
-										? 'bg-green-100 text-green-800 hover:bg-green-200' 
-										: 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+										? 'bg-white/20 text-white hover:bg-white/30 border border-white/30' 
+										: 'bg-white/10 text-white/80 hover:bg-white/20 border border-white/20'
 								}`}
 							>
 								{isAutoPlaying ? 'Auto Play ON' : 'Auto Play OFF'}
 							</button>
-							<Link
-								href="/dashboard/pictures"
-								className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-[#0b4d2b] bg-[#0b4d2b]/10 rounded-lg hover:bg-[#0b4d2b]/20 transition-colors"
-							>
-								<ExternalLink className="h-3 w-3 mr-1" />
-								View All
-							</Link>
 						</div>
 					</div>
 				</div>
 
 				{carouselPictures.length === 0 ? (
-					<div className="p-12 text-center">
+					<div className="p-12 text-center bg-white">
 						<ImageIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
 						<h3 className="text-lg font-medium text-gray-900 mb-2">No pictures available</h3>
 						<p className="text-gray-600">Pictures will appear here once they are uploaded</p>
 					</div>
 				) : (
-					<div className="relative overflow-hidden">
-						{/* Carousel Container */}
-						<div className="flex transition-transform duration-500 ease-in-out" style={{ transform: `translateX(-${currentIndex * 25}%)` }}>
-							{carouselPictures.map((picture, index) => (
-								<div key={`${picture.FileName}-${index}`} className="w-1/4 flex-shrink-0 p-4">
-									<div
-										onClick={() => handlePictureClick(picture)}
-										className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 group cursor-pointer overflow-hidden"
-									>
-										{/* Image */}
-										<div className="aspect-video bg-gray-100 relative overflow-hidden">
-											{getImageUrl(picture.FilePath) && !failedImages.has(picture.FileName || getImageUrl(picture.FilePath)) ? (
-												<img
-													src={getImageUrl(picture.FilePath)}
-													alt={picture.FileName || 'Project activity image'}
-													className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-													onError={(e) => {
-														// Only log in development mode
-														if (process.env.NODE_ENV === 'development') {
-															console.warn('Image load error for:', picture.FileName, 'URL:', getImageUrl(picture.FilePath));
-														}
-														// Mark this image as failed
-														setFailedImages(prev => new Set(prev).add(picture.FileName || getImageUrl(picture.FilePath)));
-													}}
-												/>
-											) : (
-												<div className="w-full h-full flex items-center justify-center text-gray-400">
-													<ImageIcon className="h-12 w-12" />
-												</div>
-											)}
-											<div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
-												<div className="opacity-0 group-hover:opacity-100 bg-white bg-opacity-90 text-gray-800 px-3 py-1.5 rounded-lg transition-all duration-200">
-													<span className="text-sm font-medium">Click to view</span>
-												</div>
-											</div>
-										</div>
-
-										{/* Picture Info */}
-										<div className="p-4">
-											<h3 className="text-sm font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-[#0b4d2b] transition-colors">
-												{picture.FileName}
-											</h3>
-											
-											<div className="space-y-1 text-xs text-gray-500">
-												{picture.MainCategory && (
-													<div className="flex items-center">
-														<Folder className="h-3 w-3 mr-1" />
-														<span className="line-clamp-1">{picture.MainCategory}</span>
-													</div>
-												)}
-												{picture.SubCategory && (
-													<div className="flex items-center">
-														<Folder className="h-3 w-3 mr-1" />
-														<span className="line-clamp-1">{picture.SubCategory}</span>
-													</div>
-												)}
-												{picture.EventDate && (
-													<div className="flex items-center">
-														<Calendar className="h-3 w-3 mr-1" />
-														<span>{formatDate(picture.EventDate)}</span>
-													</div>
-												)}
-											</div>
-										</div>
-									</div>
-								</div>
-							))}
-						</div>
-
-						{/* Navigation Arrows */}
-						{carouselPictures.length > 1 && (
+					<div className="relative bg-white rounded-xl shadow-sm p-6">
+						{/* Navigation Buttons */}
+						{carouselPictures.length > 3 && (
 							<>
 								<button
 									onClick={prevPicture}
-									className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-90 hover:bg-opacity-100 text-gray-600 hover:text-gray-900 p-2 rounded-full shadow-lg transition-all duration-200"
+									className="absolute left-2 top-1/2 -translate-y-1/2 z-20 bg-white rounded-full p-4 shadow-2xl hover:bg-[#0b4d2b] hover:text-white transition-all duration-300 border-2 border-gray-200 hover:border-[#0b4d2b] group"
+									aria-label="Previous images"
 								>
-									<ChevronLeft className="h-5 w-5" />
+									<ChevronLeft className="h-7 w-7 text-gray-700 group-hover:text-white transition-colors" />
 								</button>
 								<button
 									onClick={nextPicture}
-									className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-90 hover:bg-opacity-100 text-gray-600 hover:text-gray-900 p-2 rounded-full shadow-lg transition-all duration-200"
+									className="absolute right-2 top-1/2 -translate-y-1/2 z-20 bg-white rounded-full p-4 shadow-2xl hover:bg-[#0b4d2b] hover:text-white transition-all duration-300 border-2 border-gray-200 hover:border-[#0b4d2b] group"
+									aria-label="Next images"
 								>
-									<ChevronRight className="h-5 w-5" />
+									<ChevronRight className="h-7 w-7 text-gray-700 group-hover:text-white transition-colors" />
 								</button>
 							</>
 						)}
 
+						{/* Three Images Grid */}
+						<div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-12">
+							{carouselPictures.slice(currentIndex, currentIndex + 3).map((picture, index) => {
+								const actualIndex = currentIndex + index;
+								const imageUrl = getImageUrl(picture.FilePath);
+								
+								return (
+									<div
+										key={picture.PictureID || `picture-${actualIndex}`}
+										className="group relative"
+									>
+										{/* Elegant Card Container */}
+										<div className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden transform hover:-translate-y-1 border border-gray-100 cursor-pointer" onClick={() => handlePictureClick(picture)}>
+											{/* Image Frame - Reduced Height */}
+											<div className="relative w-full bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 p-2 overflow-hidden" style={{ height: '280px' }}>
+												{/* Inner Frame */}
+												<div className="relative w-full h-full rounded-lg overflow-hidden shadow-inner border-2 border-white/50">
+													{imageUrl ? (
+														<>
+															<Image
+																src={imageUrl}
+																alt={picture.FileName || "Picture"}
+																fill
+																className="object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+																unoptimized
+																onError={(e) => {
+																	console.log("Image load error for:", picture.FilePath);
+																}}
+															/>
+															{/* Elegant Overlay */}
+															<div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+															{/* Shine Effect */}
+															<div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+														</>
+													) : (
+														<div className="flex items-center justify-center h-full bg-gradient-to-br from-gray-100 to-gray-200">
+															<ImageIcon className="h-16 w-16 text-gray-400" />
+														</div>
+													)}
+													
+													{/* Category Badge - Always Visible */}
+													{picture.MainCategory && (
+														<div className="absolute top-2 left-2 bg-gradient-to-r from-[#0b4d2b] to-[#0a3d24] text-white text-xs font-semibold px-2.5 py-1 rounded-full shadow-xl backdrop-blur-sm border border-white/20">
+															{picture.MainCategory}
+														</div>
+													)}
+													
+													{/* Image Number Badge */}
+													<div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-xs font-medium px-2 py-0.5 rounded-full border border-white/20">
+														{actualIndex + 1} / {carouselPictures.length}
+													</div>
+												</div>
+											</div>
+											
+											{/* Information Panel - Compact */}
+											<div className="p-4 bg-gradient-to-b from-white via-gray-50/50 to-white border-t border-gray-100">
+												{/* Title */}
+												{picture.FileName && (
+													<h3 className="text-sm font-bold text-gray-900 line-clamp-1 mb-3 group-hover:text-[#0b4d2b] transition-colors duration-300">
+														{picture.FileName}
+													</h3>
+												)}
+												
+												{/* Details - Compact Layout */}
+												<div className="space-y-2">
+													{picture.MainCategory && (
+														<div className="flex items-center gap-2">
+															<div className="p-1 bg-[#0b4d2b]/10 rounded">
+																<Folder className="h-3.5 w-3.5 text-[#0b4d2b]" />
+															</div>
+															<div className="flex-1 min-w-0">
+																<p className="text-xs font-semibold text-gray-900 truncate">{picture.MainCategory}</p>
+																{picture.SubCategory && (
+																	<p className="text-xs text-gray-600 truncate">{picture.SubCategory}</p>
+																)}
+															</div>
+														</div>
+													)}
+													
+													<div className="flex items-center gap-4">
+														{picture.EventDate && (
+															<div className="flex items-center gap-1.5 flex-1 min-w-0">
+																<Calendar className="h-3.5 w-3.5 text-[#0b4d2b] flex-shrink-0" />
+																<p className="text-xs text-gray-700 truncate">{picture.EventDate}</p>
+															</div>
+														)}
+														
+														{picture.UploadedBy && (
+															<div className="flex items-center gap-1.5 flex-1 min-w-0">
+																<User className="h-3.5 w-3.5 text-[#0b4d2b] flex-shrink-0" />
+																<p className="text-xs text-gray-700 truncate">{picture.UploadedBy}</p>
+															</div>
+														)}
+													</div>
+												</div>
+											</div>
+											
+											{/* Decorative Bottom Border */}
+											<div className="h-0.5 bg-gradient-to-r from-[#0b4d2b] via-[#0a3d24] to-[#0b4d2b] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+										</div>
+									</div>
+								);
+							})}
+						</div>
+
 						{/* Dots Indicator */}
-						{carouselPictures.length > 1 && (
-							<div className="flex justify-center space-x-2 p-4">
-								{carouselPictures.map((_, index) => (
-									<button
-										key={index}
-										onClick={() => setCurrentIndex(index)}
-										className={`w-2 h-2 rounded-full transition-all duration-200 ${
-											index === currentIndex 
-												? 'bg-[#0b4d2b] w-6' 
-												: 'bg-gray-300 hover:bg-gray-400'
-										}`}
-									/>
-								))}
+						{carouselPictures.length > 3 && (
+							<div className="flex justify-center items-center gap-3 mt-8 pt-6 border-t border-gray-200">
+								{Array.from({ length: Math.ceil(carouselPictures.length / 3) }).map((_, index) => {
+									const slideIndex = index * 3;
+									const isActive = currentIndex >= slideIndex && currentIndex < slideIndex + 3;
+									return (
+										<button
+											key={index}
+											onClick={() => setCurrentIndex(slideIndex)}
+											className={`h-2.5 rounded-full transition-all duration-300 ${
+												isActive
+													? "w-10 bg-[#0b4d2b] shadow-md"
+													: "w-2.5 bg-gray-300 hover:bg-gray-400 hover:w-3"
+											}`}
+											aria-label={`Go to page ${index + 1}`}
+										/>
+									);
+								})}
 							</div>
 						)}
 					</div>
@@ -1990,6 +2305,138 @@ export default function DashboardPage() {
 				</div>
 			</div>
 
+			{/* RIF-II Security Alert Section */}
+			<div className="bg-gradient-to-br from-white to-red-50 rounded-xl border border-red-200 shadow-lg overflow-hidden">
+				<div className="p-6 border-b border-red-200 bg-gradient-to-r from-red-600 to-red-700">
+					<div className="flex items-center justify-between">
+						<div className="flex items-center space-x-3">
+							<div className="p-2 bg-white/20 rounded-lg">
+								<Shield className="h-6 w-6 text-white" />
+							</div>
+							<div>
+								<h2 className="text-2xl font-bold text-white">RIF-II Security Alert</h2>
+								<p className="text-sm text-red-100 mt-1">Stay informed about security incidents and alerts</p>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div className="p-6">
+					{securityAlertsLoading ? (
+						<div className="flex items-center justify-center py-8">
+							<Loader2 className="h-6 w-6 animate-spin text-red-600" />
+							<span className="ml-3 text-gray-600">Loading security alerts...</span>
+						</div>
+					) : securityAlerts.length === 0 ? (
+						<div className="text-center py-8">
+							<AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+							<p className="text-gray-600">No security alerts at this time</p>
+						</div>
+					) : (
+						<div className="space-y-4">
+							{securityAlerts.map((alert) => (
+								<div
+									key={alert.id}
+									className="bg-white rounded-lg border border-red-200 p-4 hover:shadow-md transition-shadow"
+								>
+									<div className="flex items-start justify-between">
+										<div className="flex-1">
+											<h3 className="text-lg font-semibold text-gray-900 mb-2">
+												{alert.incident_title}
+											</h3>
+											{alert.ReferenceNumber && (
+												<Link
+													href={`/dashboard/security-updates/view?ref=${encodeURIComponent(alert.ReferenceNumber)}`}
+													className="inline-flex items-center text-sm font-medium text-red-600 hover:text-red-700 hover:underline"
+												>
+													<Shield className="h-4 w-4 mr-1" />
+													Reference #: {alert.ReferenceNumber}
+													<ExternalLink className="h-3 w-3 ml-1" />
+												</Link>
+											)}
+										</div>
+									</div>
+								</div>
+							))}
+						</div>
+					)}
+				</div>
+			</div>
+
+			{/* Image Modal */}
+			{selectedPicture && (
+				<div 
+					className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+					onClick={() => setSelectedPicture(null)}
+				>
+					<div 
+						className="relative max-w-7xl max-h-[90vh] w-full mx-4"
+						onClick={(e) => e.stopPropagation()}
+					>
+						{/* Close Button */}
+						<button
+							onClick={() => setSelectedPicture(null)}
+							className="absolute top-4 right-4 z-10 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 transition-all duration-200 backdrop-blur-sm border border-white/20"
+							aria-label="Close"
+						>
+							<X className="h-6 w-6" />
+						</button>
+
+						{/* Image Container */}
+						<div className="relative w-full h-full bg-black rounded-lg overflow-hidden">
+							{getImageUrl(selectedPicture.FilePath) ? (
+								<Image
+									src={getImageUrl(selectedPicture.FilePath)}
+									alt={selectedPicture.FileName || "Picture"}
+									width={1200}
+									height={800}
+									className="w-full h-auto max-h-[90vh] object-contain"
+									unoptimized
+									onError={(e) => {
+										console.log("Image load error for:", selectedPicture.FilePath);
+									}}
+								/>
+							) : (
+								<div className="flex items-center justify-center h-[500px] bg-gray-900">
+									<ImageIcon className="h-24 w-24 text-gray-400" />
+								</div>
+							)}
+
+							{/* Picture Information Overlay */}
+							<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6">
+								<div className="text-white">
+									<h3 className="text-2xl font-bold mb-3">
+										{selectedPicture.FileName || "Untitled Picture"}
+									</h3>
+									<div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+										{selectedPicture.GroupName && (
+											<div className="flex items-center space-x-2">
+												<Folder className="h-4 w-4" />
+												<span className="font-medium">Group:</span>
+												<span>{selectedPicture.GroupName}</span>
+											</div>
+										)}
+										{selectedPicture.MainCategory && (
+											<div className="flex items-center space-x-2">
+												<Folder className="h-4 w-4" />
+												<span className="font-medium">Category:</span>
+												<span>{selectedPicture.MainCategory}</span>
+											</div>
+										)}
+										{selectedPicture.EventDate && (
+											<div className="flex items-center space-x-2">
+												<Calendar className="h-4 w-4" />
+												<span className="font-medium">Date:</span>
+												<span>{selectedPicture.EventDate}</span>
+											</div>
+										)}
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
