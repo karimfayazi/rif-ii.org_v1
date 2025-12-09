@@ -141,13 +141,6 @@ export default function LoginPage() {
 							>
 								Home
 							</Link>
-							<span className="text-gray-400">|</span>
-							<Link
-								href="/contact-us"
-								className="text-white hover:text-gray-300 transition-colors"
-							>
-								Contact Us
-							</Link>
 						</div>
 					</div>
 				</div>

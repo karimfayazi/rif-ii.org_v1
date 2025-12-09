@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAccess } from "@/hooks/useAccess";
+import * as XLSX from "xlsx";
 
 type TrainingEvent = {
 	SN?: number;
@@ -281,6 +282,117 @@ export default function TrainingPage() {
 	const totalFemale = filteredData.reduce((sum, item) => sum + (item.TotalFemale || 0), 0);
 	const totalParticipants = filteredData.reduce((sum, item) => sum + (item.TotalParticipants || 0), 0);
 
+	const handleExportToExcel = () => {
+		try {
+			// Prepare data for Excel export
+			const exportData = filteredData.map((item, index) => ({
+				"SN": item.SN || index + 1,
+				"Training Title": item.TrainingTitle || "",
+				"Output": item.Output || "",
+				"Sub No": item.SubNo || "",
+				"Sub Activity Name": item.SubActivityName || "",
+				"Event Type": item.EventType || "",
+				"Venue": item.Venue || "",
+				"Location Tehsil": item.LocationTehsil || "",
+				"District": item.District || "",
+				"Start Date": item.StartDate || "",
+				"End Date": item.EndDate || "",
+				"Total Days": item.TotalDays || 0,
+				"Training Facilitator Name": item.TrainingFacilitatorName || "",
+				"TMA Male": item.TMAMale || 0,
+				"TMA Female": item.TMAFemale || 0,
+				"PHED Male": item.PHEDMale || 0,
+				"PHED Female": item.PHEDFemale || 0,
+				"LGRD Male": item.LGRDMale || 0,
+				"LGRD Female": item.LGRDFemale || 0,
+				"PDD Male": item.PDDMale || 0,
+				"PDD Female": item.PDDFemale || 0,
+				"Community Male": item.CommunityMale || 0,
+				"Community Female": item.CommunityFemale || 0,
+				"Any Other Male": item.AnyOtherMale || 0,
+				"Any Other Female": item.AnyOtherFemale || 0,
+				"Any Other Specify": item.AnyOtherSpecify || "",
+				"Total Male": item.TotalMale || 0,
+				"Total Female": item.TotalFemale || 0,
+				"Total Participants": item.TotalParticipants || 0,
+				"Pre Training Evaluation": item.PreTrainingEvaluation || "",
+				"Post Training Evaluation": item.PostTrainingEvaluation || "",
+				"Event Agendas": item.EventAgendas || "",
+				"Expected Outcomes": item.ExpectedOutcomes || "",
+				"Challenges Faced": item.ChallengesFaced || "",
+				"Suggested Actions": item.SuggestedActions || "",
+				"Activity Completion Report Link": item.ActivityCompletionReportLink || "",
+				"Participant List Attachment": item.ParticipantListAttachment || "",
+				"Picture Attachment": item.PictureAttachment || "",
+				"Remarks": item.Remarks || "",
+				"Data Compiler Name": item.DataCompilerName || "",
+				"Data Verified By": item.DataVerifiedBy || "",
+				"Created Date": item.CreatedDate || "",
+				"Last Modified Date": item.LastModifiedDate || ""
+			}));
+
+			// Create a new workbook and worksheet
+			const worksheet = XLSX.utils.json_to_sheet(exportData);
+			const workbook = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(workbook, worksheet, "Training Data");
+
+			// Set column widths for better readability
+			const columnWidths = [
+				{ wch: 8 },   // SN
+				{ wch: 30 },  // Training Title
+				{ wch: 20 },  // Output
+				{ wch: 10 },  // Sub No
+				{ wch: 25 },  // Sub Activity Name
+				{ wch: 15 },  // Event Type
+				{ wch: 25 },  // Venue
+				{ wch: 18 },  // Location Tehsil
+				{ wch: 12 },  // District
+				{ wch: 12 },  // Start Date
+				{ wch: 12 },  // End Date
+				{ wch: 10 },  // Total Days
+				{ wch: 25 },  // Training Facilitator Name
+				{ wch: 10 },  // TMA Male
+				{ wch: 12 },  // TMA Female
+				{ wch: 12 },  // PHED Male
+				{ wch: 14 },  // PHED Female
+				{ wch: 12 },  // LGRD Male
+				{ wch: 14 },  // LGRD Female
+				{ wch: 10 },  // PDD Male
+				{ wch: 12 },  // PDD Female
+				{ wch: 15 },  // Community Male
+				{ wch: 17 },  // Community Female
+				{ wch: 15 },  // Any Other Male
+				{ wch: 17 },  // Any Other Female
+				{ wch: 18 },  // Any Other Specify
+				{ wch: 12 },  // Total Male
+				{ wch: 14 },  // Total Female
+				{ wch: 18 },  // Total Participants
+				{ wch: 25 },  // Pre Training Evaluation
+				{ wch: 25 },  // Post Training Evaluation
+				{ wch: 30 },  // Event Agendas
+				{ wch: 25 },  // Expected Outcomes
+				{ wch: 25 },  // Challenges Faced
+				{ wch: 20 },  // Suggested Actions
+				{ wch: 35 },  // Activity Completion Report Link
+				{ wch: 30 },  // Participant List Attachment
+				{ wch: 25 },  // Picture Attachment
+				{ wch: 30 },  // Remarks
+				{ wch: 20 },  // Data Compiler Name
+				{ wch: 18 },  // Data Verified By
+				{ wch: 15 },  // Created Date
+				{ wch: 18 }   // Last Modified Date
+			];
+			worksheet['!cols'] = columnWidths;
+
+			// Generate Excel file and download
+			const fileName = `training_data_${new Date().toISOString().split('T')[0]}.xlsx`;
+			XLSX.writeFile(workbook, fileName);
+		} catch (error) {
+			console.error('Error exporting to Excel:', error);
+			alert('Failed to export data to Excel. Please try again.');
+		}
+	};
+
 	if (accessLoading || loading) {
 		return (
 			<div className="space-y-6">
@@ -355,6 +467,14 @@ export default function TrainingPage() {
 					>
 						<RefreshCw className="h-4 w-4 mr-2" />
 						Refresh
+					</button>
+					<button
+						onClick={handleExportToExcel}
+						disabled={filteredData.length === 0}
+						className="inline-flex items-center px-4 py-2 bg-[#0b4d2b] text-white rounded-lg hover:bg-[#0a3d24] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						<Download className="h-4 w-4 mr-2" />
+						Export to Excel
 					</button>
 				</div>
 			</div>
