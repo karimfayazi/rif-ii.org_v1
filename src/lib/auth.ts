@@ -10,7 +10,7 @@ export function getUserIdFromCookie(): string | null {
 	return null;
 }
 
-export function getUserIdFromRequest(request: Request): string | null {
+export function getUserIdFromRequest(request: { headers: { get: (name: string) => string | null } }): string | null {
 	const cookie = request.headers.get("cookie") || "";
 	// Try multiple patterns to extract user ID from cookie
 	const patterns = [
@@ -27,4 +27,43 @@ export function getUserIdFromRequest(request: Request): string | null {
 	}
 	
 	return null;
+}
+
+export async function checkDeleteAccess(userId: string | null): Promise<{ hasAccess: boolean; message?: string }> {
+	if (!userId) {
+		return { hasAccess: false, message: "Unauthorized" };
+	}
+
+	try {
+		const { getDb } = await import("@/lib/db");
+		const pool = await getDb();
+		const accessQuery = `
+			SELECT [access_delete]
+			FROM [_rifiiorg_db].[dbo].[tbl_user_access]
+			WHERE [username] = @userId OR [email] = @userId
+		`;
+		
+		const accessResult = await pool.request()
+			.input('userId', userId)
+			.query(accessQuery);
+		
+		if (accessResult.recordset.length === 0) {
+			return { hasAccess: false, message: "User not found" };
+		}
+
+		const accessDelete = accessResult.recordset[0].access_delete;
+		const hasAccess = accessDelete === true || accessDelete === 1;
+		
+		if (!hasAccess) {
+			return { 
+				hasAccess: false, 
+				message: "Insufficient Permissions. This action requires delete access. Please contact your administrator if you believe this is an error." 
+			};
+		}
+
+		return { hasAccess: true };
+	} catch (error) {
+		console.error("Error checking delete access:", error);
+		return { hasAccess: false, message: "Error checking access permissions" };
+	}
 }

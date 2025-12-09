@@ -19,6 +19,7 @@ export default function DeleteGISMapsByKMLPage() {
 		success: boolean;
 		message: string;
 		deletedCount?: number;
+		fileType?: string;
 		areaNamesFromKML?: string[];
 		matchingMaps?: Array<{
 			MapID: number;

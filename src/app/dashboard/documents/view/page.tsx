@@ -88,13 +88,13 @@ export default function DocumentViewPage() {
 			const fullUrl = getDocumentUrl(document.FilePath);
 			
 			// Create a temporary link element to trigger download
-			const link = document.createElement('a');
+			const link = window.document.createElement('a');
 			link.href = fullUrl;
 			link.download = document.Title || 'document';
 			link.target = '_blank';
-			document.body.appendChild(link);
+			window.document.body.appendChild(link);
 			link.click();
-			document.body.removeChild(link);
+			window.document.body.removeChild(link);
 		} catch (error) {
 			console.error('Download failed:', error);
 			alert('Download failed. Please try again.');

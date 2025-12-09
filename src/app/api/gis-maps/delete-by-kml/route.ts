@@ -6,7 +6,7 @@ import AdmZip from "adm-zip";
 export async function POST(request: NextRequest) {
 	try {
 		// Check delete access
-		const userId = getUserIdFromRequest(request);
+		const userId = getUserIdFromRequest({ headers: request.headers });
 		const accessCheck = await checkDeleteAccess(userId);
 		
 		if (!accessCheck.hasAccess) {
@@ -93,12 +93,12 @@ export async function POST(request: NextRequest) {
 			WHERE AreaName IN (${placeholders})
 		`;
 
-		const request = pool.request();
+		const dbRequest = pool.request();
 		areaNames.forEach((name, i) => {
-			request.input(`areaName${i}`, name);
+			dbRequest.input(`areaName${i}`, name);
 		});
 
-		const result = await request.query(query);
+		const result = await dbRequest.query(query);
 		const matchingMaps = result.recordset;
 
 		if (matchingMaps.length === 0) {
